@@ -66,13 +66,16 @@ export class Vehicle {
 
         // Surface effects
         if (roadInfo) {
-            if (roadInfo.onSidewalk) {
+            if (roadInfo.onShoulder) {
+                // Rumble strip feel on shoulder
+                this.speed *= (1 - 0.3 * dt);
+                this.shakeAmount = Math.max(this.shakeAmount, Math.abs(this.speed) * 0.002);
+            } else if (roadInfo.onSidewalk) {
                 // Bumpy, slower on sidewalk
                 this.speed *= (1 - 0.8 * dt);
                 this.shakeAmount = Math.max(this.shakeAmount, Math.abs(this.speed) * 0.003);
-            }
-            // Off-road
-            if (!roadInfo.onRoad && !roadInfo.onSidewalk) {
+            } else if (roadInfo.offRoad) {
+                // Heavy drag off-road
                 this.speed *= (1 - 1.5 * dt);
                 this.shakeAmount = Math.max(this.shakeAmount, Math.abs(this.speed) * 0.005);
             }
