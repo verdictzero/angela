@@ -3,7 +3,7 @@
  *
  * Smoothly transitions through dawn → day → dusk → night.
  * Controls sky color, fog, ambient/directional lighting,
- * street light intensity, headlight intensity, and stars.
+ * headlight intensity, and stars.
  */
 
 import * as THREE from 'three';
@@ -56,10 +56,10 @@ const COLORS = {
 };
 
 const INTENSITY = {
-    night: { ambient: 0.3, sun: 0.15, hemi: 0.2, streetLight: 1.2, headlight: 50, fogNear: 30, fogFar: 180 },
-    dawn:  { ambient: 0.8, sun: 0.7,  hemi: 0.5, streetLight: 0.4, headlight: 15, fogNear: 60, fogFar: 280 },
-    day:   { ambient: 1.5, sun: 1.4,  hemi: 0.9, streetLight: 0.0, headlight: 5,  fogNear: 100, fogFar: 400 },
-    dusk:  { ambient: 0.6, sun: 0.5,  hemi: 0.4, streetLight: 0.6, headlight: 25, fogNear: 50, fogFar: 250 },
+    night: { ambient: 0.3, sun: 0.15, hemi: 0.2, headlight: 50, fogNear: 30, fogFar: 180 },
+    dawn:  { ambient: 0.8, sun: 0.7,  hemi: 0.5, headlight: 15, fogNear: 60, fogFar: 280 },
+    day:   { ambient: 1.5, sun: 1.4,  hemi: 0.9, headlight: 5,  fogNear: 100, fogFar: 400 },
+    dusk:  { ambient: 0.6, sun: 0.5,  hemi: 0.4, headlight: 25, fogNear: 50, fogFar: 250 },
 };
 
 export class DayNightCycle {

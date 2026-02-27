@@ -128,8 +128,7 @@ function gameLoop() {
     // Day/night cycle (always runs, even on start screen)
     const intensity = dayNight.update(dt, ambient, dirLight, hemiLight, fog, scene);
 
-    // Street lights and headlights follow day/night
-    road.setStreetLightIntensity(intensity.streetLight);
+    // Headlights follow day/night
     cockpit.setHeadlightIntensity(intensity.headlight);
 
     // Tone mapping exposure shifts slightly with time of day

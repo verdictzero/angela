@@ -10,7 +10,7 @@
  */
 
 import * as THREE from 'three';
-import { randomRange, randomInt, clamp, createCanvasTexture } from './utils.js';
+import { randomRange, clamp, createCanvasTexture } from './utils.js';
 
 // ── Road dimensions ────────────────────────────────────────────
 const ROAD_HALF_WIDTH = 3.5;       // 2 lanes, each 3.5m
@@ -33,13 +33,6 @@ const DASH_LENGTH = 3;
 const DASH_GAP = 4;
 const GROUND_SIZE = 2000;
 
-// Props
-const POLE_INTERVAL = 10;
-const BUILDING_INTERVAL = 6;
-const BUILDING_SETBACK = SW_OUTER + 1;   // just past sidewalk edge
-const INTERSECTION_INTERVAL = 5;
-const STREETLIGHT_INTERVAL = 8;
-
 export class RoadManager {
     constructor(scene) {
         this.scene = scene;
@@ -49,8 +42,6 @@ export class RoadManager {
         this.currentCurvature = 0;
         this.targetCurvature = 0;
         this.totalDistance = 0;
-        this.chunkCounter = 0;
-        this.streetLights = [];
 
         // Generate textures
         this._textures = this._generateTextures();
@@ -62,21 +53,6 @@ export class RoadManager {
         this._curbMat = new THREE.MeshLambertMaterial({ color: 0x555558 });
         this._markingMat = new THREE.MeshBasicMaterial({ color: 0xeeeeee });
         this._yellowMat = new THREE.MeshBasicMaterial({ color: 0xddcc33 });
-        this._crosswalkMat = new THREE.MeshBasicMaterial({ color: 0xeeeeee });
-
-        // Prop materials / geometry
-        this._poleMat = new THREE.MeshLambertMaterial({ color: 0x5a4030 });
-        this._metalMat = new THREE.MeshLambertMaterial({ color: 0x666666 });
-        this._concreteMat = new THREE.MeshLambertMaterial({ color: 0x888888 });
-        this._poleGeo = new THREE.CylinderGeometry(0.1, 0.13, 8, 6);
-        this._crossbarGeo = new THREE.CylinderGeometry(0.04, 0.04, 1.8, 4);
-        this._lampGeo = new THREE.CylinderGeometry(0.06, 0.12, 0.3, 6);
-        this._lampArmGeo = new THREE.BoxGeometry(0.06, 0.06, 1.5);
-        this._buildingColors = [
-            0x8a7a6a, 0x6a6a7a, 0x7a6a5a, 0x5a5a6a,
-            0x888078, 0x706860, 0x907860, 0x606870,
-            0x786050, 0x585868, 0x9a8a7a, 0x686058
-        ];
 
         // Ground plane
         this._groundMat = new THREE.MeshLambertMaterial({ map: this._textures.grass });
@@ -270,9 +246,6 @@ export class RoadManager {
         const count = endIdx - startIdx;
         if (count < 2) return null;
 
-        this.chunkCounter++;
-        const isIntersection = (this.chunkCounter % INTERSECTION_INTERVAL === 0);
-
         // Road surface (2 lanes)
         const roadGeo = this._buildStripGeometry(startIdx, endIdx, -ROAD_HALF_WIDTH, ROAD_HALF_WIDTH, 0, 0, 7);
         const roadMesh = new THREE.Mesh(roadGeo, this._roadMat);
@@ -319,15 +292,6 @@ export class RoadManager {
         // White edge lines (where road meets shoulder)
         this._addSolidLine(group, startIdx, endIdx, -ROAD_HALF_WIDTH + 0.15, 0.02, 0.08, this._markingMat);
         this._addSolidLine(group, startIdx, endIdx, ROAD_HALF_WIDTH - 0.15, 0.02, 0.08, this._markingMat);
-
-        // Props
-        this._addTelephonePoles(group, startIdx, endIdx, isIntersection);
-        this._addStreetLights(group, startIdx, endIdx, isIntersection);
-        this._addBuildings(group, startIdx, endIdx, isIntersection);
-
-        if (isIntersection) {
-            this._buildIntersection(group, startIdx + Math.floor(count / 2));
-        }
 
         const chunk = { group, startIdx, endIdx, startDist: startIdx * POINT_SPACING };
         this.scene.add(group);
@@ -379,249 +343,6 @@ export class RoadManager {
         geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
         geo.setIndex(indices);
         return geo;
-    }
-
-    // ── Telephone Poles ────────────────────────────────────────
-
-    _addTelephonePoles(group, startIdx, endIdx, skipNearCenter) {
-        const midIdx = startIdx + Math.floor((endIdx - startIdx) / 2);
-        for (let i = startIdx + 2; i < endIdx - 2; i += POLE_INTERVAL) {
-            if (skipNearCenter && Math.abs(i - midIdx) < 8) continue;
-            const pt = this.points[i];
-            const p = pt.position;
-            const r = pt.right;
-            const lateral = SW_OUTER - 0.3;
-            const px = p.x + r.x * lateral;
-            const pz = p.z + r.z * lateral;
-
-            const pole = new THREE.Mesh(this._poleGeo, this._poleMat);
-            pole.position.set(px, 4, pz);
-            group.add(pole);
-
-            const crossbar = new THREE.Mesh(this._crossbarGeo, this._metalMat);
-            crossbar.position.set(px, 7.8, pz);
-            crossbar.rotation.z = Math.PI / 2;
-            crossbar.rotation.y = Math.atan2(r.x, r.z);
-            group.add(crossbar);
-
-            for (const s of [-0.7, -0.3, 0.3, 0.7]) {
-                const ins = new THREE.Mesh(
-                    new THREE.CylinderGeometry(0.03, 0.03, 0.15, 4),
-                    this._concreteMat
-                );
-                ins.position.set(px + r.x * s * 0.3, 8.0, pz + r.z * s * 0.3);
-                group.add(ins);
-            }
-        }
-    }
-
-    // ── Street Lights ──────────────────────────────────────────
-
-    _addStreetLights(group, startIdx, endIdx, skipNearCenter) {
-        const midIdx = startIdx + Math.floor((endIdx - startIdx) / 2);
-        for (let i = startIdx + 4; i < endIdx - 4; i += STREETLIGHT_INTERVAL) {
-            if (skipNearCenter && Math.abs(i - midIdx) < 8) continue;
-            const pt = this.points[i];
-            const p = pt.position;
-            const r = pt.right;
-
-            const side = (Math.floor(i / STREETLIGHT_INTERVAL) % 2 === 0) ? -1 : 1;
-            const lateral = side * (CURB_OUTER + 0.4);
-            const lx = p.x + r.x * lateral;
-            const lz = p.z + r.z * lateral;
-
-            const post = new THREE.Mesh(
-                new THREE.CylinderGeometry(0.06, 0.08, 5, 6),
-                this._metalMat
-            );
-            post.position.set(lx, 2.5, lz);
-            group.add(post);
-
-            const arm = new THREE.Mesh(this._lampArmGeo, this._metalMat);
-            const armDir = -side;
-            arm.position.set(lx + r.x * armDir * 0.75, 4.9, lz + r.z * armDir * 0.75);
-            arm.rotation.y = Math.atan2(r.x, r.z);
-            group.add(arm);
-
-            const lamp = new THREE.Mesh(this._lampGeo, new THREE.MeshBasicMaterial({ color: 0xffeecc }));
-            const lampX = lx + r.x * armDir * 1.5;
-            const lampZ = lz + r.z * armDir * 1.5;
-            lamp.position.set(lampX, 4.8, lampZ);
-            group.add(lamp);
-
-            const light = new THREE.PointLight(0xffddaa, 0.8, 25, 1.5);
-            light.position.set(lampX, 4.7, lampZ);
-            group.add(light);
-            this.streetLights.push(light);
-        }
-    }
-
-    // ── Buildings ──────────────────────────────────────────────
-
-    _addBuildings(group, startIdx, endIdx, skipNearCenter) {
-        const midIdx = startIdx + Math.floor((endIdx - startIdx) / 2);
-        for (let i = startIdx + 1; i < endIdx - 1; i += BUILDING_INTERVAL) {
-            if (skipNearCenter && Math.abs(i - midIdx) < 12) continue;
-            const pt = this.points[i];
-            const p = pt.position;
-            const r = pt.right;
-            const f = pt.forward;
-
-            for (const side of [-1, 1]) {
-                if (Math.random() > 0.7) continue;
-                const w = randomRange(5, 14);
-                const h = randomRange(4, 18);
-                const d = randomRange(5, 12);
-                const setback = BUILDING_SETBACK + d / 2 + randomRange(0, 3);
-                const lateral = side * setback;
-                const along = randomRange(-2, 2);
-                const bx = p.x + r.x * lateral + f.x * along;
-                const bz = p.z + r.z * lateral + f.z * along;
-
-                const colorIdx = Math.floor(Math.random() * this._buildingColors.length);
-                const buildingMat = new THREE.MeshLambertMaterial({ color: this._buildingColors[colorIdx] });
-                const building = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), buildingMat);
-                building.position.set(bx, h / 2, bz);
-                building.rotation.y = Math.atan2(f.x, f.z) + randomRange(-0.1, 0.1);
-                group.add(building);
-
-                this._addBuildingWindows(group, w, h, d, bx, bz, r, side);
-            }
-        }
-    }
-
-    _addBuildingWindows(group, w, h, d, bx, bz, roadRight, side) {
-        const windowMat = new THREE.MeshBasicMaterial({ color: 0x223344 });
-        const litWindowMat = new THREE.MeshBasicMaterial({ color: 0xffeeaa });
-        const windowGeo = new THREE.PlaneGeometry(0.8, 1.0);
-        const faceDist = d / 2 + 0.01;
-        const cols = Math.floor(w / 2.5);
-        const rows = Math.floor(h / 3);
-
-        for (let row = 0; row < rows; row++) {
-            for (let col = 0; col < cols; col++) {
-                if (Math.random() > 0.8) continue;
-                const wx = (col - (cols - 1) / 2) * 2.2;
-                const wy = 1.5 + row * 2.8;
-                const isLit = Math.random() > 0.6;
-                const win = new THREE.Mesh(windowGeo, isLit ? litWindowMat : windowMat);
-                const faceDir = -side;
-                win.position.set(
-                    bx + roadRight.x * faceDir * faceDist + roadRight.z * wx,
-                    wy,
-                    bz + roadRight.z * faceDir * faceDist - roadRight.x * wx
-                );
-                win.rotation.y = Math.atan2(roadRight.x * faceDir, roadRight.z * faceDir);
-                group.add(win);
-            }
-        }
-    }
-
-    // ── Intersections ──────────────────────────────────────────
-
-    _buildIntersection(group, pointIdx) {
-        const pt = this.points[clamp(pointIdx, 0, this.points.length - 1)];
-        const p = pt.position;
-        const r = pt.right;
-        const f = pt.forward;
-
-        const crossLength = 25;
-        const crossWidth = 7;
-        const segments = 12;
-
-        // Cross-street road surface
-        const verts = [], uvs = [], indices = [];
-        for (let i = 0; i <= segments; i++) {
-            const t = (i / segments) * 2 - 1;
-            const dist = t * crossLength;
-            const lx = p.x + r.x * dist - f.x * crossWidth / 2;
-            const lz = p.z + r.z * dist - f.z * crossWidth / 2;
-            const rx = p.x + r.x * dist + f.x * crossWidth / 2;
-            const rz = p.z + r.z * dist + f.z * crossWidth / 2;
-            verts.push(lx, 0.005, lz, rx, 0.005, rz);
-            uvs.push(0, dist / 7, 1, dist / 7);
-            if (i < segments) {
-                const bl = i * 2, br = i * 2 + 1;
-                const tl = (i + 1) * 2, tr = (i + 1) * 2 + 1;
-                indices.push(bl, br, tl, br, tr, tl);
-            }
-        }
-        const crossGeo = new THREE.BufferGeometry();
-        crossGeo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
-        crossGeo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-        crossGeo.setIndex(indices);
-        crossGeo.computeVertexNormals();
-        group.add(new THREE.Mesh(crossGeo, this._roadMat));
-
-        // Cross-street sidewalks
-        for (const cside of [-1, 1]) {
-            const swVerts = [], swUvs = [], swIdx = [];
-            const swOff = crossWidth / 2 + CURB_WIDTH + SHOULDER_WIDTH;
-            for (let i = 0; i <= segments; i++) {
-                const t = (i / segments) * 2 - 1;
-                const dist = t * crossLength;
-                const baseX = p.x + r.x * dist;
-                const baseZ = p.z + r.z * dist;
-                const lx = baseX + f.x * cside * swOff;
-                const lz = baseZ + f.z * cside * swOff;
-                const rx = baseX + f.x * cside * (swOff + SIDEWALK_WIDTH);
-                const rz = baseZ + f.z * cside * (swOff + SIDEWALK_WIDTH);
-                swVerts.push(lx, CURB_HEIGHT, lz, rx, CURB_HEIGHT, rz);
-                swUvs.push(0, dist / 3, 1, dist / 3);
-                if (i < segments) {
-                    const bl = i * 2, br = i * 2 + 1;
-                    const tl = (i + 1) * 2, tr = (i + 1) * 2 + 1;
-                    swIdx.push(bl, br, tl, br, tr, tl);
-                }
-            }
-            const swGeo = new THREE.BufferGeometry();
-            swGeo.setAttribute('position', new THREE.Float32BufferAttribute(swVerts, 3));
-            swGeo.setAttribute('uv', new THREE.Float32BufferAttribute(swUvs, 2));
-            swGeo.setIndex(swIdx);
-            swGeo.computeVertexNormals();
-            group.add(new THREE.Mesh(swGeo, this._sidewalkMat));
-        }
-
-        // Crosswalk zebra stripes
-        for (const cwSide of [-1, 1]) {
-            const cwDist = cwSide * (crossWidth / 2 + 1);
-            for (let s = -ROAD_HALF_WIDTH + 0.5; s < ROAD_HALF_WIDTH - 0.5; s += 1.2) {
-                const sx = p.x + f.x * cwDist + r.x * s;
-                const sz = p.z + f.z * cwDist + r.z * s;
-                const stripe = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 2.5), this._crosswalkMat);
-                stripe.rotation.x = -Math.PI / 2;
-                stripe.rotation.z = Math.atan2(f.x, f.z);
-                stripe.position.set(sx, 0.03, sz);
-                group.add(stripe);
-            }
-        }
-
-        // Traffic lights
-        this._addTrafficLight(group, p, r, f, -1, 1);
-        this._addTrafficLight(group, p, r, f, 1, -1);
-    }
-
-    _addTrafficLight(group, center, right, forward, rSide, fSide) {
-        const x = center.x + right.x * rSide * (SHOULDER_OUTER + 1) + forward.x * fSide * 5;
-        const z = center.z + right.z * rSide * (SHOULDER_OUTER + 1) + forward.z * fSide * 5;
-        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 4.5, 6), this._metalMat);
-        post.position.set(x, 2.25, z);
-        group.add(post);
-        const housing = new THREE.Mesh(
-            new THREE.BoxGeometry(0.4, 1.0, 0.3),
-            new THREE.MeshLambertMaterial({ color: 0x222222 })
-        );
-        housing.position.set(x, 4.8, z);
-        group.add(housing);
-        const colors = [0xff0000, 0xffaa00, 0x00ff00];
-        for (let i = 0; i < 3; i++) {
-            const bulb = new THREE.Mesh(
-                new THREE.SphereGeometry(0.07, 6, 6),
-                new THREE.MeshBasicMaterial({ color: colors[i] })
-            );
-            bulb.position.set(x, 5.1 - i * 0.3, z + 0.16);
-            group.add(bulb);
-        }
     }
 
     // ── Lane Markings ──────────────────────────────────────────
@@ -696,8 +417,9 @@ export class RoadManager {
             this._generatePoints(POINTS_PER_CHUNK);
         }
         while (lastChunkEnd < aheadIdx) {
-            const start = lastChunkEnd;
-            const end = Math.min(start + POINTS_PER_CHUNK, this.points.length);
+            // Overlap by 1 point so geometry bridges chunk boundaries
+            const start = (lastChunkEnd > 0) ? lastChunkEnd - 1 : 0;
+            const end = Math.min(lastChunkEnd + POINTS_PER_CHUNK, this.points.length);
             if (end - start < 2) break;
             this._buildChunk(start, end);
             lastChunkEnd = end;
@@ -775,10 +497,6 @@ export class RoadManager {
         return positions;
     }
 
-    setStreetLightIntensity(intensity) {
-        for (const light of this.streetLights) light.intensity = intensity;
-    }
-
     update(playerPos) {
         // Move ground with player
         this._ground.position.x = playerPos.x;
@@ -799,10 +517,6 @@ export class RoadManager {
             const old = this.chunks.shift();
             this.scene.remove(old.group);
             old.group.traverse((child) => {
-                if (child.isPointLight) {
-                    const idx = this.streetLights.indexOf(child);
-                    if (idx !== -1) this.streetLights.splice(idx, 1);
-                }
                 if (child.geometry) child.geometry.dispose();
             });
         }
