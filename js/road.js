@@ -368,7 +368,8 @@ export class RoadManager {
             if (i < count - 1) {
                 const bl = i * 2, br = i * 2 + 1;
                 const tl = (i + 1) * 2, tr = (i + 1) * 2 + 1;
-                indices.push(bl, tl, br, br, tl, tr);
+                // CCW winding from above so faces aren't back-face culled
+                indices.push(bl, br, tl, br, tr, tl);
             }
         }
 
@@ -542,7 +543,7 @@ export class RoadManager {
             if (i < segments) {
                 const bl = i * 2, br = i * 2 + 1;
                 const tl = (i + 1) * 2, tr = (i + 1) * 2 + 1;
-                indices.push(bl, tl, br, br, tl, tr);
+                indices.push(bl, br, tl, br, tr, tl);
             }
         }
         const crossGeo = new THREE.BufferGeometry();
@@ -570,7 +571,7 @@ export class RoadManager {
                 if (i < segments) {
                     const bl = i * 2, br = i * 2 + 1;
                     const tl = (i + 1) * 2, tr = (i + 1) * 2 + 1;
-                    swIdx.push(bl, tl, br, br, tl, tr);
+                    swIdx.push(bl, br, tl, br, tr, tl);
                 }
             }
             const swGeo = new THREE.BufferGeometry();
@@ -640,7 +641,7 @@ export class RoadManager {
                     p.x + r.x * (lateralOffset + halfWidth), yOffset, p.z + r.z * (lateralOffset + halfWidth)
                 );
                 if (vCount >= 2) {
-                    dashIndices.push(vCount - 2, vCount, vCount - 1, vCount - 1, vCount, vCount + 1);
+                    dashIndices.push(vCount - 2, vCount - 1, vCount, vCount - 1, vCount + 1, vCount);
                 }
                 vCount += 2;
             } else {
@@ -675,7 +676,7 @@ export class RoadManager {
             if (i < count - 1) {
                 const bl = i * 2, br = i * 2 + 1;
                 const tl = (i + 1) * 2, tr = (i + 1) * 2 + 1;
-                indices.push(bl, tl, br, br, tl, tr);
+                indices.push(bl, br, tl, br, tr, tl);
             }
         }
         const geo = new THREE.BufferGeometry();
@@ -784,9 +785,11 @@ export class RoadManager {
         this._ground.position.z = playerPos.z;
 
         // Scroll ground UV so the grass texture stays world-fixed
+        // X offset tracks player X; Y offset is negated because the plane
+        // rotation (-PI/2 around X) maps local Y to -world Z
         const rep = this._textures.grass.repeat;
         this._textures.grass.offset.x = playerPos.x * rep.x / GROUND_SIZE;
-        this._textures.grass.offset.y = playerPos.z * rep.y / GROUND_SIZE;
+        this._textures.grass.offset.y = -playerPos.z * rep.y / GROUND_SIZE;
 
         this._buildAllNeededChunks(playerPos);
 

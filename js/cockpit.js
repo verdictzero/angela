@@ -23,14 +23,15 @@ export class Cockpit {
         this._buildWindshieldFrame();
         this._buildDoorPanel();
         this._buildHeadlights();
+        this._buildInteriorLighting();
 
         this.wheelTargetAngle = 0;
         this.wheelCurrentAngle = 0;
     }
 
     _buildDashboard() {
-        const dashMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
-        const darkMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
+        const dashMat = new THREE.MeshLambertMaterial({ color: 0x2a2a2e });
+        const darkMat = new THREE.MeshLambertMaterial({ color: 0x1e1e22 });
 
         // Main dashboard — full width
         const dash = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.15, 0.8), dashMat);
@@ -240,6 +241,23 @@ export class Cockpit {
         this._headlightR.target.position.set(0.6, -1, -20);
         this.group.add(this._headlightR);
         this.group.add(this._headlightR.target);
+    }
+
+    _buildInteriorLighting() {
+        // Overhead dome light — illuminates the cockpit so it's visible
+        const domeLight = new THREE.PointLight(0xddeeff, 0.6, 4, 1.5);
+        domeLight.position.set(0, 0.5, -1.0);
+        this.group.add(domeLight);
+
+        // Instrument cluster backlight (green-ish glow)
+        const clusterLight = new THREE.PointLight(0x44ff88, 0.3, 1.5, 2);
+        clusterLight.position.set(DRIVER_X, -0.3, -1.2);
+        this.group.add(clusterLight);
+
+        // Subtle center console glow
+        const consoleLight = new THREE.PointLight(0x4488ff, 0.15, 1.0, 2);
+        consoleLight.position.set(0.15, -0.3, -1.2);
+        this.group.add(consoleLight);
     }
 
     /**
