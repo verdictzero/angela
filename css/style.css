@@ -1,0 +1,250 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    overflow: hidden;
+    background: #1a1a1a;
+    font-family: 'Courier New', monospace;
+    color: #fff;
+    -webkit-user-select: none;
+    user-select: none;
+    touch-action: none;
+}
+
+#game-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+}
+
+#game-container canvas {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* Start Screen */
+#start-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.85);
+    cursor: pointer;
+}
+
+#start-screen h1 {
+    font-size: 6rem;
+    color: #cc0000;
+    text-shadow: 0 0 20px #ff0000, 0 0 40px #880000;
+    letter-spacing: 0.3em;
+    margin-bottom: 0.2em;
+}
+
+#start-screen p {
+    font-size: 1.5rem;
+    color: #888;
+    margin-bottom: 2em;
+}
+
+#start-prompt {
+    font-size: 1.2rem;
+    color: #fff;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+#controls-info {
+    margin-top: 2em;
+    font-size: 0.85rem;
+    color: #555;
+    text-align: center;
+    line-height: 1.8;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+/* HUD */
+#hud {
+    position: fixed;
+    z-index: 50;
+    pointer-events: none;
+}
+
+#hud-speed {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    font-size: 3rem;
+    font-weight: bold;
+    color: #0f0;
+    text-shadow: 0 0 10px #0f0;
+}
+
+#hud-speed span {
+    font-size: 1rem;
+    color: #0a0;
+}
+
+#hud-score {
+    position: fixed;
+    top: 20px;
+    right: 30px;
+    font-size: 1.5rem;
+    color: #ff4444;
+    text-shadow: 0 0 8px #ff0000;
+}
+
+#hud-combo {
+    position: fixed;
+    top: 60px;
+    right: 30px;
+    font-size: 1.2rem;
+    color: #ff8800;
+    text-shadow: 0 0 8px #ff4400;
+    transition: opacity 0.3s;
+}
+
+#hud-combo.hidden {
+    opacity: 0;
+}
+
+/* Blood Overlay */
+#blood-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 40;
+    pointer-events: none;
+    opacity: 0;
+    background: radial-gradient(ellipse at center, transparent 40%, rgba(180, 0, 0, 0.6) 100%);
+    transition: opacity 0.1s ease-in;
+}
+
+#blood-overlay.active {
+    opacity: 1;
+    transition: opacity 0.05s ease-in;
+}
+
+/* Touch Controls */
+#touch-controls {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 200px;
+    z-index: 60;
+    pointer-events: none;
+}
+
+#touch-controls.hidden {
+    display: none;
+}
+
+#touch-steer {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    width: 140px;
+    height: 140px;
+    pointer-events: auto;
+}
+
+#joystick-base {
+    width: 140px;
+    height: 140px;
+    border-radius: 70px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(255, 255, 255, 0.25);
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+#joystick-thumb {
+    width: 56px;
+    height: 56px;
+    border-radius: 28px;
+    background: rgba(255, 255, 255, 0.35);
+    border: 2px solid rgba(255, 255, 255, 0.5);
+    position: absolute;
+    transition: none;
+}
+
+#touch-pedals {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: auto;
+}
+
+#btn-gas, #btn-brake {
+    width: 100px;
+    height: 70px;
+    border: none;
+    border-radius: 12px;
+    font-family: 'Courier New', monospace;
+    font-size: 1.1rem;
+    font-weight: bold;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+
+#btn-gas {
+    background: rgba(0, 180, 0, 0.4);
+    color: #0f0;
+    border: 2px solid rgba(0, 255, 0, 0.3);
+}
+
+#btn-gas:active, #btn-gas.pressed {
+    background: rgba(0, 180, 0, 0.7);
+}
+
+#btn-brake {
+    background: rgba(180, 0, 0, 0.4);
+    color: #f44;
+    border: 2px solid rgba(255, 0, 0, 0.3);
+}
+
+#btn-brake:active, #btn-brake.pressed {
+    background: rgba(180, 0, 0, 0.7);
+}
+
+/* Responsive adjustments */
+@media (max-width: 600px) {
+    #start-screen h1 {
+        font-size: 3rem;
+    }
+
+    #hud-speed {
+        font-size: 2rem;
+        bottom: 220px;
+        right: 15px;
+    }
+
+    #hud-score {
+        font-size: 1.1rem;
+        top: 10px;
+        right: 15px;
+    }
+}
