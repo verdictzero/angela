@@ -42,6 +42,7 @@ export class RoadManager {
         this.currentCurvature = 0;
         this.targetCurvature = 0;
         this.totalDistance = 0;
+        this._nextChunkId = 0;
 
         // Generate textures
         this._textures = this._generateTextures();
@@ -293,7 +294,7 @@ export class RoadManager {
         this._addSolidLine(group, startIdx, endIdx, -ROAD_HALF_WIDTH + 0.15, 0.02, 0.08, this._markingMat);
         this._addSolidLine(group, startIdx, endIdx, ROAD_HALF_WIDTH - 0.15, 0.02, 0.08, this._markingMat);
 
-        const chunk = { group, startIdx, endIdx, startDist: startIdx * POINT_SPACING };
+        const chunk = { id: this._nextChunkId++, group, startIdx, endIdx, startDist: startIdx * POINT_SPACING };
         this.scene.add(group);
         this.chunks.push(chunk);
         return chunk;
@@ -466,9 +467,19 @@ export class RoadManager {
         };
     }
 
+    /**
+     * Return chunks with id > lastId (for spawn tracking).
+     */
+    getNewChunks(lastId) {
+        return this.chunks.filter(c => c.id > lastId);
+    }
+
     getSpawnPositions(chunkIndex) {
         if (chunkIndex >= this.chunks.length) return [];
-        const chunk = this.chunks[chunkIndex];
+        return this._spawnPositionsForChunk(this.chunks[chunkIndex]);
+    }
+
+    _spawnPositionsForChunk(chunk) {
         const positions = [];
         for (let i = chunk.startIdx + 5; i < chunk.endIdx - 5; i += 8) {
             const pt = this.points[i];

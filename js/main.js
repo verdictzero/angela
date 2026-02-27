@@ -67,16 +67,14 @@ scene.add(camera);
 
 // ── Monster Spawning ──────────────────────────────────────────
 
-let lastSpawnedChunkIndex = -1;
+let lastSpawnedChunkId = -1;
 
 function spawnMonstersForNewChunks() {
-    const totalChunks = road.chunkCount;
-    for (let i = lastSpawnedChunkIndex + 1; i < totalChunks; i++) {
-        const spawnPositions = road.getSpawnPositions(i);
-        monsters.spawnFromChunk(i, spawnPositions);
-    }
-    if (totalChunks > 0) {
-        lastSpawnedChunkIndex = totalChunks - 1;
+    const newChunks = road.getNewChunks(lastSpawnedChunkId);
+    for (const chunk of newChunks) {
+        const spawnPositions = road._spawnPositionsForChunk(chunk);
+        monsters.spawnFromChunk(chunk.id, spawnPositions);
+        if (chunk.id > lastSpawnedChunkId) lastSpawnedChunkId = chunk.id;
     }
 }
 
