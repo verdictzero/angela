@@ -62,6 +62,14 @@ const INTENSITY = {
     dusk:  { ambient: 0.6, sun: 0.5,  hemi: 0.4, headlight: 25, fogNear: 50, fogFar: 250 },
 };
 
+// Fullscreen color tint per phase — [r, g, b, opacity]
+const TINT = {
+    night: [10, 18, 55, 0.22],
+    dawn:  [255, 140, 70, 0.10],
+    day:   [255, 252, 245, 0.0],
+    dusk:  [255, 90, 40, 0.14],
+};
+
 export class DayNightCycle {
     constructor(scene) {
         this.scene = scene;
@@ -74,6 +82,13 @@ export class DayNightCycle {
 
         // Sun direction helper (for directional light positioning)
         this._sunAngle = 0;
+
+        // Fullscreen tint overlay
+        this._tintOverlay = document.createElement('div');
+        this._tintOverlay.style.cssText =
+            'position:fixed;top:0;left:0;width:100%;height:100%;' +
+            'pointer-events:none;z-index:1;background:transparent;';
+        document.body.appendChild(this._tintOverlay);
 
         // Current interpolated values (exposed for external reads)
         this.currentColors = {
@@ -216,6 +231,16 @@ export class DayNightCycle {
         // Fog distances
         fog.near = this.currentIntensity.fogNear;
         fog.far = this.currentIntensity.fogFar;
+
+        // Fullscreen tint overlay
+        const tA = TINT[phase.a];
+        const tB = TINT[phase.b];
+        const tr = lerp(tA[0], tB[0], t);
+        const tg = lerp(tA[1], tB[1], t);
+        const tb = lerp(tA[2], tB[2], t);
+        const ta = lerp(tA[3], tB[3], t);
+        this._tintOverlay.style.background =
+            `rgba(${Math.round(tr)},${Math.round(tg)},${Math.round(tb)},${ta.toFixed(3)})`;
 
         // Stars visibility
         const nightness = this._getNightness();
