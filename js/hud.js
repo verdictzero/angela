@@ -1,7 +1,7 @@
 /**
  * HUD Manager
  *
- * Updates on-screen UI elements: speed, score, combo counter.
+ * Updates on-screen UI elements: speed, score, combo counter, time of day.
  */
 
 export class HUD {
@@ -9,16 +9,14 @@ export class HUD {
         this._speedEl = document.getElementById('hud-speed');
         this._scoreEl = document.getElementById('hud-score');
         this._comboEl = document.getElementById('hud-combo');
+        this._timeEl = document.getElementById('hud-time');
 
         this.score = 0;
         this.combo = 0;
         this.comboTimer = 0;
-        this.comboTimeout = 2.0; // seconds to maintain combo
+        this.comboTimeout = 2.0;
     }
 
-    /**
-     * Register a monster kill.
-     */
     addKill(points = 100) {
         this.combo++;
         this.comboTimer = this.comboTimeout;
@@ -27,7 +25,6 @@ export class HUD {
         const total = points * multiplier;
         this.score += total;
 
-        // Update combo display
         if (this._comboEl) {
             if (this.combo > 1) {
                 this._comboEl.textContent = `x${this.combo} COMBO! +${total}`;
@@ -37,18 +34,19 @@ export class HUD {
         }
     }
 
-    update(dt, speedKmh) {
-        // Speed display
+    update(dt, speedKmh, timeStr, phaseName) {
         if (this._speedEl) {
             this._speedEl.innerHTML = `${speedKmh} <span>km/h</span>`;
         }
 
-        // Score display
         if (this._scoreEl) {
             this._scoreEl.textContent = `SCORE: ${this.score}`;
         }
 
-        // Combo timer
+        if (this._timeEl && timeStr) {
+            this._timeEl.textContent = `${timeStr} ${phaseName}`;
+        }
+
         if (this.comboTimer > 0) {
             this.comboTimer -= dt;
             if (this.comboTimer <= 0) {
