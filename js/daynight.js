@@ -106,6 +106,7 @@ export class DayNightCycle {
             sizeAttenuation: true,
             transparent: true,
             opacity: 0,
+            fog: false,
         });
 
         return new THREE.Points(geo, mat);
