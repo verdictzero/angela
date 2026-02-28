@@ -474,6 +474,19 @@ export class RoadManager {
         return this.chunks.filter(c => c.id > lastId);
     }
 
+    /**
+     * Return the chunk containing the given world position, or null.
+     */
+    getChunkAt(pos) {
+        const idx = this._findClosestPointIndex(pos);
+        for (const chunk of this.chunks) {
+            if (idx >= chunk.startIdx && idx < chunk.endIdx) {
+                return chunk;
+            }
+        }
+        return this.chunks.length > 0 ? this.chunks[0] : null;
+    }
+
     getSpawnPositions(chunkIndex) {
         if (chunkIndex >= this.chunks.length) return [];
         return this._spawnPositionsForChunk(this.chunks[chunkIndex]);

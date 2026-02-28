@@ -10,7 +10,7 @@ import { InputManager } from './input.js';
 import { RoadManager } from './road.js';
 import { Vehicle } from './vehicle.js';
 import { Cockpit, DRIVER_OFFSET_X } from './cockpit.js';
-import { MonsterManager } from './monsters.js';
+import { KillableNPCManager } from './killable_npcs.js';
 import { GoreSystem } from './gore.js';
 import { HUD } from './hud.js';
 import { DayNightCycle } from './daynight.js';
@@ -58,7 +58,7 @@ const input = new InputManager();
 const road = new RoadManager(scene);
 const vehicle = new Vehicle();
 const cockpit = new Cockpit(camera);
-const monsters = new MonsterManager(scene);
+const killableNPCs = new KillableNPCManager(scene);
 const gore = new GoreSystem(scene);
 const hud = new HUD();
 const dayNight = new DayNightCycle(scene);
@@ -66,17 +66,17 @@ const dayNight = new DayNightCycle(scene);
 // Cockpit is child of camera, add camera to scene
 scene.add(camera);
 
-// ── Monster Spawning ──────────────────────────────────────────
+// ── NPC Spawning ─────────────────────────────────────────────
 
 let lastSpawnedChunkId = -1;
 const spawnedChunkIds = new Set();
 
-function spawnMonstersForNewChunks() {
+function spawnNPCsForNewChunks() {
     const newChunks = road.getNewChunks(lastSpawnedChunkId);
     for (const chunk of newChunks) {
         if (!spawnedChunkIds.has(chunk.id)) {
             const spawnPositions = road._spawnPositionsForChunk(chunk);
-            monsters.spawnFromChunk(chunk.id, spawnPositions, road.points);
+            killableNPCs.spawnFromChunk(chunk.id, spawnPositions, road.points);
             spawnedChunkIds.add(chunk.id);
         }
         if (chunk.id > lastSpawnedChunkId) lastSpawnedChunkId = chunk.id;
@@ -167,14 +167,14 @@ function gameLoop() {
     // Update road (generate ahead, remove behind)
     road.update(vehicle.position);
 
-    // Spawn monsters in new chunks
-    spawnMonstersForNewChunks();
+    // Spawn NPCs in new chunks
+    spawnNPCsForNewChunks();
 
-    // Update monsters (pass road points so mopeds follow the road)
-    monsters.update(dt, camera.position, vehicle.position, vehicle.angle, road.points);
+    // Update killable NPCs (pass road points so they follow the road)
+    killableNPCs.update(dt, camera.position, vehicle.position, vehicle.angle, road.points);
 
-    // Check monster hits
-    const hits = monsters.checkHits(vehicle.position, vehicle.angle, vehicle.speed);
+    // Check NPC hits
+    const hits = killableNPCs.checkHits(vehicle.position, vehicle.angle, vehicle.speed);
     for (const hit of hits) {
         gore.spawn(hit.position, hit.velocity);
         vehicle.applyImpact(0.15);
@@ -190,8 +190,14 @@ function gameLoop() {
     // Update camera — LHD offset
     updateCamera(dt);
 
-    // Update HUD
-    hud.update(dt, vehicle.speedKmh, dayNight.getTimeString(), dayNight.getPhaseName());
+    // Update HUD — include debug info (chunk ID, coordinates, NPC count)
+    const currentChunk = road.getChunkAt(vehicle.position);
+    hud.update(dt, vehicle.speedKmh, dayNight.getTimeString(), dayNight.getPhaseName(), {
+        chunkId: currentChunk ? currentChunk.id : -1,
+        x: Math.round(vehicle.position.x),
+        z: Math.round(vehicle.position.z),
+        npcCount: killableNPCs.aliveCount,
+    });
 
     // Render
     renderer.render(scene, camera);
@@ -220,5 +226,5 @@ function updateCamera(dt) {
 
 // ── Initialize ────────────────────────────────────────────────
 
-spawnMonstersForNewChunks();
+spawnNPCsForNewChunks();
 gameLoop();
