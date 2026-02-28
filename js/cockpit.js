@@ -19,6 +19,7 @@ const Z_RATIO_WHEEL = Math.abs(WHEEL_Z) / Math.abs(DASH_Z);
 
 // ── Dashboard ────────────────────────────────────────────────
 const DASH_WIDTH_PAD = 1.15;   // wider than viewport to cover edges during sway
+const MIN_DASH_ASPECT = 2.0;   // minimum effective viewport aspect — prevents portrait squish
 
 // ── Steering wheel — centered on red + from dash_notes ──────
 // Red + position in dash image coords (0-1, top-left origin)
@@ -126,8 +127,9 @@ export class Cockpit {
         const visH_dash = 2 * dDash * Math.tan(fov / 2);
         const visW_dash = visH_dash * aspect;
 
-        // ── Dashboard — fill width, push down so top edge is at bottom third
-        const dashW = visW_dash * DASH_WIDTH_PAD;
+        // ── Dashboard — fill width (clamped so portrait doesn't squish)
+        const effectiveAspect = Math.max(aspect, MIN_DASH_ASPECT);
+        const dashW = (visH_dash * effectiveAspect) * DASH_WIDTH_PAD;
         const dashH = dashW / this.dashAspect;
 
         this.dashMesh.scale.set(dashW, dashH, 1);
