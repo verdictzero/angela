@@ -493,6 +493,7 @@ export class RoadManager {
                         pt.position.z + pt.right.z * roadLat
                     ),
                     forward: pt.forward.clone(),
+                    lateralOffset: roadLat,
                     roadIndex: i, type: 'road'
                 });
             }
@@ -506,6 +507,7 @@ export class RoadManager {
                         pt.position.z + pt.right.z * swLat
                     ),
                     forward: pt.forward.clone(),
+                    lateralOffset: swLat,
                     roadIndex: i, type: 'sidewalk'
                 });
             }

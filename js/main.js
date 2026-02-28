@@ -69,12 +69,16 @@ scene.add(camera);
 // ── Monster Spawning ──────────────────────────────────────────
 
 let lastSpawnedChunkId = -1;
+const spawnedChunkIds = new Set();
 
 function spawnMonstersForNewChunks() {
     const newChunks = road.getNewChunks(lastSpawnedChunkId);
     for (const chunk of newChunks) {
-        const spawnPositions = road._spawnPositionsForChunk(chunk);
-        monsters.spawnFromChunk(chunk.id, spawnPositions);
+        if (!spawnedChunkIds.has(chunk.id)) {
+            const spawnPositions = road._spawnPositionsForChunk(chunk);
+            monsters.spawnFromChunk(chunk.id, spawnPositions, road.points);
+            spawnedChunkIds.add(chunk.id);
+        }
         if (chunk.id > lastSpawnedChunkId) lastSpawnedChunkId = chunk.id;
     }
 }
@@ -166,8 +170,8 @@ function gameLoop() {
     // Spawn monsters in new chunks
     spawnMonstersForNewChunks();
 
-    // Update monsters
-    monsters.update(dt, camera.position, vehicle.position, vehicle.angle);
+    // Update monsters (pass road points so mopeds follow the road)
+    monsters.update(dt, camera.position, vehicle.position, vehicle.angle, road.points);
 
     // Check monster hits
     const hits = monsters.checkHits(vehicle.position, vehicle.angle, vehicle.speed);

@@ -2,7 +2,8 @@
  * Monster Manager — Moped Riders
  *
  * Spawns moped riders on the road that drive in the same direction
- * as the player at varying slower speeds. Uses BillboardSprite with
+ * as the player at varying slower speeds. Mopeds follow the road
+ * by advancing along road spine points. Uses BillboardSprite with
  * the unlit shader for ambient tint and fog.
  */
 
@@ -13,7 +14,7 @@ import { randomRange } from './utils.js';
 const HIT_RADIUS = 2.5;             // hit detection radius
 const HIT_FORWARD = 4;              // how far in front of car to check
 const MAX_MONSTERS = 300;
-const SPAWN_AHEAD = 300;
+const DESPAWN_BEHIND = 80;           // despawn if this far behind player
 const MOPED_SPEED_MIN = 5;          // m/s (~18 km/h)
 const MOPED_SPEED_MAX = 12;         // m/s (~43 km/h)
 const MOPED_HEIGHT = 2.2;
@@ -36,16 +37,13 @@ export class MonsterManager {
     constructor(scene) {
         this.scene = scene;
         this.monsters = [];
-        this._lastSpawnChunkIdx = -1;
     }
 
     /**
      * Spawn moped riders from road chunk spawn positions.
+     * roadPoints is the full road.points array so mopeds can follow the road.
      */
-    spawnFromChunk(chunkIndex, spawnPositions) {
-        if (chunkIndex <= this._lastSpawnChunkIdx) return;
-        this._lastSpawnChunkIdx = chunkIndex;
-
+    spawnFromChunk(chunkIndex, spawnPositions, roadPoints) {
         for (const spawn of spawnPositions) {
             if (this.monsters.length >= MAX_MONSTERS) break;
 
@@ -60,7 +58,9 @@ export class MonsterManager {
                 sprite,
                 alive: true,
                 speed: randomRange(MOPED_SPEED_MIN, MOPED_SPEED_MAX),
-                forward: spawn.forward ? spawn.forward.clone() : new THREE.Vector3(0, 0, -1),
+                roadIndex: spawn.roadIndex,       // current road spine point index
+                lateralOffset: spawn.lateralOffset || 0, // offset from road center
+                distAccum: 0,                     // distance accumulated toward next point
             };
 
             this.scene.add(sprite.mesh);
@@ -69,28 +69,62 @@ export class MonsterManager {
     }
 
     /**
-     * Update all mopeds: movement, billboarding, despawn.
+     * Update all mopeds: advance along road spine, billboard, despawn.
+     * roadPoints is the full road.points array.
      */
-    update(dt, cameraPosition, vehiclePos, vehicleAngle) {
+    update(dt, cameraPosition, vehiclePos, vehicleAngle, roadPoints) {
+        const pointSpacing = 4; // must match POINT_SPACING in road.js
+        const maxIdx = roadPoints.length - 1;
+
         for (let i = this.monsters.length - 1; i >= 0; i--) {
             const m = this.monsters[i];
             if (!m.alive) continue;
 
-            const mpos = m.sprite.mesh.position;
+            // Advance along road spine
+            const dist = m.speed * dt;
+            m.distAccum += dist;
 
-            // Despawn if too far behind
-            const dx = vehiclePos.x - mpos.x;
-            const dz = vehiclePos.z - mpos.z;
-            const dist = Math.sqrt(dx * dx + dz * dz);
+            // Move to next road point(s) when accumulated distance exceeds spacing
+            while (m.distAccum >= pointSpacing && m.roadIndex < maxIdx) {
+                m.distAccum -= pointSpacing;
+                m.roadIndex++;
+            }
 
-            if (dist > SPAWN_AHEAD + 50) {
+            // Clamp to valid range
+            if (m.roadIndex >= maxIdx) {
                 this._removeMonster(i);
                 continue;
             }
 
-            // Drive forward along the road
-            mpos.x += m.forward.x * m.speed * dt;
-            mpos.z += m.forward.z * m.speed * dt;
+            // Interpolate position between current and next road point
+            const ptA = roadPoints[m.roadIndex];
+            const ptB = roadPoints[Math.min(m.roadIndex + 1, maxIdx)];
+            const t = m.distAccum / pointSpacing;
+
+            const cx = ptA.position.x + (ptB.position.x - ptA.position.x) * t;
+            const cz = ptA.position.z + (ptB.position.z - ptA.position.z) * t;
+
+            // Apply lateral offset using interpolated right vector
+            const rx = ptA.right.x + (ptB.right.x - ptA.right.x) * t;
+            const rz = ptA.right.z + (ptB.right.z - ptA.right.z) * t;
+
+            const mpos = m.sprite.mesh.position;
+            mpos.x = cx + rx * m.lateralOffset;
+            mpos.y = 0;
+            mpos.z = cz + rz * m.lateralOffset;
+
+            // Despawn if too far behind player
+            const dx = vehiclePos.x - mpos.x;
+            const dz = vehiclePos.z - mpos.z;
+            // Use dot product with player forward to check if behind
+            const playerFwd = new THREE.Vector3(
+                Math.sin(vehicleAngle), 0, -Math.cos(vehicleAngle)
+            );
+            const behind = -(dx * playerFwd.x + dz * playerFwd.z);
+            if (behind > DESPAWN_BEHIND) {
+                this._removeMonster(i);
+                continue;
+            }
 
             // Billboard toward camera
             m.sprite.update(cameraPosition);
