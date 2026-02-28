@@ -16,10 +16,13 @@ import * as THREE from 'three';
 // Mutating .value updates every material in one shot.
 
 export const unlitUniforms = {
-    ambientTint: { value: new THREE.Color(1, 1, 1) },
-    fogColor:    { value: new THREE.Color(0x889999) },
-    fogStart:    { value: 100.0 },
-    fogEnd:      { value: 400.0 },
+    ambientTint:        { value: new THREE.Color(1, 1, 1) },
+    fogColor:           { value: new THREE.Color(0x889999) },
+    fogStart:           { value: 100.0 },
+    fogEnd:             { value: 400.0 },
+    headlightPos:       { value: new THREE.Vector3() },
+    headlightDir:       { value: new THREE.Vector3(0, 0, -1) },
+    headlightIntensity: { value: 0.0 },
 };
 
 // ── Vertex Shader ────────────────────────────────────────────
@@ -27,10 +30,13 @@ export const unlitUniforms = {
 const vertexShader = /* glsl */ `
 varying vec2 vUv;
 varying float vViewDepth;
+varying vec3 vWorldPos;
 
 void main() {
     vUv = uv;
-    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+    vec4 worldPos = modelMatrix * vec4(position, 1.0);
+    vWorldPos = worldPos.xyz;
+    vec4 mvPosition = viewMatrix * worldPos;
     vViewDepth = -mvPosition.z;
     gl_Position = projectionMatrix * mvPosition;
 }
@@ -46,17 +52,31 @@ uniform float fogStart;
 uniform float fogEnd;
 uniform float alphaTest;
 uniform float opacity;
+uniform vec3 headlightPos;
+uniform vec3 headlightDir;
+uniform float headlightIntensity;
 
 varying vec2 vUv;
 varying float vViewDepth;
+varying vec3 vWorldPos;
 
 void main() {
     vec4 texColor = texture2D(albedoMap, vUv);
 
     if (texColor.a < alphaTest) discard;
 
-    // Multiplicative tint — darkens/colors the base texture
-    vec3 color = texColor.rgb * ambientTint;
+    // Headlight spotlight
+    vec3 toFrag = vWorldPos - headlightPos;
+    float dist = length(toFrag);
+    vec3 toFragDir = toFrag / dist;
+    float cosAngle = dot(toFragDir, headlightDir);
+    float spotEffect = smoothstep(0.7, 0.9, cosAngle);
+    float atten = clamp(1.0 - dist / 120.0, 0.0, 1.0);
+    atten *= atten;
+    vec3 headlight = vec3(1.0, 1.0, 0.8) * headlightIntensity * spotEffect * atten;
+
+    // Multiplicative tint + additive headlight
+    vec3 color = texColor.rgb * (ambientTint + headlight);
 
     // Distance fog via smoothstep
     float fogFactor = smoothstep(fogStart, fogEnd, vViewDepth);
@@ -95,10 +115,13 @@ export function createUnlitMaterial(texture, options = {}) {
             alphaTest:   { value: alphaTest },
             opacity:     { value: opacity },
             // Shared — mutating .value on these updates all materials
-            ambientTint: unlitUniforms.ambientTint,
-            fogColor:    unlitUniforms.fogColor,
-            fogStart:    unlitUniforms.fogStart,
-            fogEnd:      unlitUniforms.fogEnd,
+            ambientTint:        unlitUniforms.ambientTint,
+            fogColor:           unlitUniforms.fogColor,
+            fogStart:           unlitUniforms.fogStart,
+            fogEnd:             unlitUniforms.fogEnd,
+            headlightPos:       unlitUniforms.headlightPos,
+            headlightDir:       unlitUniforms.headlightDir,
+            headlightIntensity: unlitUniforms.headlightIntensity,
         },
         vertexShader,
         fragmentShader,
