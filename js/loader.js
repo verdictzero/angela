@@ -54,6 +54,8 @@ export async function loadGLB(url, options = {}) {
         };
 
         if (texture) {
+            texture.magFilter = THREE.NearestFilter;
+            texture.minFilter = THREE.NearestFilter;
             child.material = createUnlitMaterial(texture, matOpts);
         } else {
             // No texture — bake the material color into a 1×1 canvas texture

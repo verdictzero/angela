@@ -26,6 +26,8 @@ function getMopedTexture() {
     if (!mopedTexture) {
         mopedTexture = new THREE.TextureLoader().load('assets/moped_guy.png');
         mopedTexture.colorSpace = THREE.SRGBColorSpace;
+        mopedTexture.magFilter = THREE.NearestFilter;
+        mopedTexture.minFilter = THREE.NearestFilter;
     }
     return mopedTexture;
 }

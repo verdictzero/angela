@@ -22,7 +22,7 @@ const DASH_WIDTH_PAD = 1.15;   // wider than viewport to cover edges during sway
 
 // ── Steering wheel — centered on red + from dash_notes ──────
 // Red + position in dash image coords (0-1, top-left origin)
-const RED_CROSS_X = 0.23;
+const RED_CROSS_X = 0.205;
 const RED_CROSS_Y = 0.68;
 const WHEEL_SIZE_FRAC = 1.70;  // wheel height as fraction of dash height (2x)
 
@@ -63,6 +63,8 @@ export class Cockpit {
 
         loader.load('assets/dashboard.png', (tex) => {
             tex.colorSpace = THREE.SRGBColorSpace;
+            tex.magFilter = THREE.NearestFilter;
+            tex.minFilter = THREE.NearestFilter;
             this.dashAspect = tex.image.width / tex.image.height;
 
             const mat = createUnlitMaterial(tex, {
@@ -81,6 +83,8 @@ export class Cockpit {
 
         loader.load('assets/steering_wheel.png', (tex) => {
             tex.colorSpace = THREE.SRGBColorSpace;
+            tex.magFilter = THREE.NearestFilter;
+            tex.minFilter = THREE.NearestFilter;
             this.wheelAspect = tex.image.width / tex.image.height;
 
             const mat = createUnlitMaterial(tex, {
