@@ -26,9 +26,10 @@ const WHEEL_PARALLAX = 1.0;    // closer layer sways more
 // Dashboard sizing
 const DASH_WIDTH_PAD = 1.15;   // 15% wider than viewport to cover edges during sway
 
-// Steering wheel sizing
+// Steering wheel sizing & placement
 const WHEEL_SCALE = 0.65;      // fraction of visible height
 const WHEEL_Y_ANCHOR = 0.35;   // how far up from bottom (0=bottom edge, 1=center)
+const WHEEL_X_FRAC = -0.23;    // fraction of visible width from center (negative = left, aligns with column)
 
 export class Cockpit {
     constructor(camera) {
@@ -43,6 +44,8 @@ export class Cockpit {
 
         this.swayX = 0;
         this.wheelCurrentAngle = 0;
+        this._wheelBaseX = 0;
+        this._dashBaseX = 0;
 
         this._loadImages();
         this._buildHeadlights();
@@ -113,15 +116,18 @@ export class Cockpit {
             this.dashMesh.position.y = -visH / 2 + dashH / 2;
         }
 
-        // Steering wheel — proportional to viewport height, bottom-center
+        // Steering wheel — aligned with column opening on the left side of the dash
         if (this.wheelMesh) {
             const d = Math.abs(WHEEL_Z);
             const visH = 2 * d * Math.tan(fov / 2);
+            const visW = visH * aspect;
 
             const wheelH = visH * WHEEL_SCALE;
             const wheelW = wheelH * this.wheelAspect;
 
             this.wheelMesh.scale.set(wheelW, wheelH, 1);
+            this._wheelBaseX = visW * WHEEL_X_FRAC;
+            this.wheelMesh.position.x = this._wheelBaseX;
             this.wheelMesh.position.y = -visH / 2 + wheelH * WHEEL_Y_ANCHOR;
         }
     }
@@ -151,11 +157,11 @@ export class Cockpit {
         this.swayX = lerp(this.swayX, swayTarget, SWAY_SPEED * dt);
 
         if (this.dashMesh) {
-            this.dashMesh.position.x = this.swayX * DASH_PARALLAX;
+            this.dashMesh.position.x = this._dashBaseX + this.swayX * DASH_PARALLAX;
         }
 
         if (this.wheelMesh) {
-            this.wheelMesh.position.x = this.swayX * WHEEL_PARALLAX;
+            this.wheelMesh.position.x = this._wheelBaseX + this.swayX * WHEEL_PARALLAX;
 
             // Rotate steering wheel with input
             const wheelTarget = -vehicle.steerAngle * 2.5;
