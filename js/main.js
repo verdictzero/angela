@@ -180,8 +180,8 @@ function gameLoop() {
     // Update gore particles
     gore.update(dt, camera.position);
 
-    // Update cockpit (pass speed + time for instrument gauges)
-    cockpit.update(dt, vehicle, vehicle.speedKmh, dayNight.getTimeString());
+    // Update cockpit
+    cockpit.update(dt, vehicle);
 
     // Update camera — LHD offset
     updateCamera(dt);
