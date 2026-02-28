@@ -140,6 +140,9 @@ function gameLoop() {
     // Headlights follow day/night
     cockpit.setHeadlightIntensity(intensity.headlight);
 
+    // Headlight uniforms for unlit shader (updated after updateCamera sets camera.position)
+    unlitUniforms.headlightIntensity.value = intensity.headlight / 50.0;
+
     // Tone mapping exposure shifts slightly with time of day
     renderer.toneMappingExposure = dayNight.isNight ? 0.8 : 1.1;
 
@@ -189,6 +192,10 @@ function gameLoop() {
 
     // Update camera — LHD offset
     updateCamera(dt);
+
+    // Sync headlight pos/dir now that camera is positioned
+    unlitUniforms.headlightPos.value.copy(camera.position);
+    unlitUniforms.headlightDir.value.copy(vehicle.getForward());
 
     // Update HUD — include debug info (chunk ID, coordinates, NPC count)
     const currentChunk = road.getChunkAt(vehicle.position);
