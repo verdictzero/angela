@@ -1,7 +1,8 @@
 /**
  * HUD Manager
  *
- * Updates on-screen UI elements: speed, score, combo counter, time of day.
+ * Updates on-screen UI elements: speed, score, combo counter, time of day,
+ * and debug info (chunk ID, coordinates, NPC count).
  */
 
 export class HUD {
@@ -10,6 +11,7 @@ export class HUD {
         this._scoreEl = document.getElementById('hud-score');
         this._comboEl = document.getElementById('hud-combo');
         this._timeEl = document.getElementById('hud-time');
+        this._debugEl = document.getElementById('hud-debug');
 
         this.score = 0;
         this.combo = 0;
@@ -34,7 +36,7 @@ export class HUD {
         }
     }
 
-    update(dt, speedKmh, timeStr, phaseName) {
+    update(dt, speedKmh, timeStr, phaseName, debugInfo) {
         if (this._speedEl) {
             this._speedEl.innerHTML = `${speedKmh} <span>km/h</span>`;
         }
@@ -45,6 +47,12 @@ export class HUD {
 
         if (this._timeEl && timeStr) {
             this._timeEl.textContent = `${timeStr} ${phaseName}`;
+        }
+
+        // Debug info: chunk ID, coordinates, NPC count
+        if (this._debugEl && debugInfo) {
+            this._debugEl.textContent =
+                `CHUNK: ${debugInfo.chunkId}  X: ${debugInfo.x}  Z: ${debugInfo.z}  NPCs: ${debugInfo.npcCount}`;
         }
 
         if (this.comboTimer > 0) {

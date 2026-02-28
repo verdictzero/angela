@@ -1,8 +1,8 @@
 /**
- * Monster Manager — Moped Riders
+ * Killable NPC Manager — Moped Riders
  *
  * Spawns moped riders on the road that drive in the same direction
- * as the player at varying slower speeds. Mopeds follow the road
+ * as the player at varying slower speeds. NPCs follow the road
  * by advancing along road spine points. Uses BillboardSprite with
  * the unlit shader for ambient tint and fog.
  */
@@ -13,14 +13,14 @@ import { randomRange } from './utils.js';
 
 const HIT_RADIUS = 2.5;             // hit detection radius
 const HIT_FORWARD = 4;              // how far in front of car to check
-const MAX_MONSTERS = 600;
+const MAX_NPCS = 600;
 const DESPAWN_BEHIND = 80;           // despawn if this far behind player
 const MOPED_SPEED_MIN = 5;          // m/s (~18 km/h)
 const MOPED_SPEED_MAX = 12;         // m/s (~43 km/h)
 const MOPED_HEIGHT = 2.2;
 const MOPED_WIDTH = MOPED_HEIGHT * 0.4;  // maintain source image aspect ratio (250x625)
 
-// Shared texture — loaded once, reused by all mopeds
+// Shared texture — loaded once, reused by all NPCs
 let mopedTexture = null;
 
 function getMopedTexture() {
@@ -33,19 +33,19 @@ function getMopedTexture() {
     return mopedTexture;
 }
 
-export class MonsterManager {
+export class KillableNPCManager {
     constructor(scene) {
         this.scene = scene;
-        this.monsters = [];
+        this.npcs = [];
     }
 
     /**
-     * Spawn moped riders from road chunk spawn positions.
-     * roadPoints is the full road.points array so mopeds can follow the road.
+     * Spawn NPC riders from road chunk spawn positions.
+     * roadPoints is the full road.points array so NPCs can follow the road.
      */
     spawnFromChunk(chunkIndex, spawnPositions, roadPoints) {
         for (const spawn of spawnPositions) {
-            if (this.monsters.length >= MAX_MONSTERS) break;
+            if (this.npcs.length >= MAX_NPCS) break;
 
             // Only spawn on road (not sidewalks)
             if (spawn.type !== 'road') continue;
@@ -54,7 +54,7 @@ export class MonsterManager {
             const sprite = new BillboardSprite(tex, MOPED_WIDTH, MOPED_HEIGHT);
             sprite.setPosition(spawn.position.x, spawn.position.y, spawn.position.z);
 
-            const monster = {
+            const npc = {
                 sprite,
                 alive: true,
                 speed: randomRange(MOPED_SPEED_MIN, MOPED_SPEED_MAX),
@@ -64,20 +64,20 @@ export class MonsterManager {
             };
 
             this.scene.add(sprite.mesh);
-            this.monsters.push(monster);
+            this.npcs.push(npc);
         }
     }
 
     /**
-     * Update all mopeds: advance along road spine, billboard, despawn.
+     * Update all NPCs: advance along road spine, billboard, despawn.
      * roadPoints is the full road.points array.
      */
     update(dt, cameraPosition, vehiclePos, vehicleAngle, roadPoints) {
         const pointSpacing = 4; // must match POINT_SPACING in road.js
         const maxIdx = roadPoints.length - 1;
 
-        for (let i = this.monsters.length - 1; i >= 0; i--) {
-            const m = this.monsters[i];
+        for (let i = this.npcs.length - 1; i >= 0; i--) {
+            const m = this.npcs[i];
             if (!m.alive) continue;
 
             // Advance along road spine
@@ -92,7 +92,7 @@ export class MonsterManager {
 
             // Clamp to valid range
             if (m.roadIndex >= maxIdx) {
-                this._removeMonster(i);
+                this._removeNPC(i);
                 continue;
             }
 
@@ -116,12 +116,11 @@ export class MonsterManager {
             // Despawn if too far behind player
             const dx = vehiclePos.x - mpos.x;
             const dz = vehiclePos.z - mpos.z;
-            // Dot (moped→vehicle) with playerFwd is positive when moped is behind
             const fwdX = Math.sin(vehicleAngle);
             const fwdZ = -Math.cos(vehicleAngle);
             const behind = dx * fwdX + dz * fwdZ;
             if (behind > DESPAWN_BEHIND) {
-                this._removeMonster(i);
+                this._removeNPC(i);
                 continue;
             }
 
@@ -131,7 +130,7 @@ export class MonsterManager {
     }
 
     /**
-     * Check for vehicle-moped collisions.
+     * Check for vehicle-NPC collisions.
      * Returns array of hit positions for gore spawning.
      */
     checkHits(vehiclePos, vehicleAngle, vehicleSpeed) {
@@ -148,8 +147,8 @@ export class MonsterManager {
             vehiclePos.z + forward.z * HIT_FORWARD * 0.5
         );
 
-        for (let i = this.monsters.length - 1; i >= 0; i--) {
-            const m = this.monsters[i];
+        for (let i = this.npcs.length - 1; i >= 0; i--) {
+            const m = this.npcs[i];
             if (!m.alive) continue;
 
             const mpos = m.sprite.mesh.position;
@@ -163,22 +162,22 @@ export class MonsterManager {
                     variant: 0,
                     velocity: forward.clone().multiplyScalar(vehicleSpeed * 0.5)
                 });
-                this._removeMonster(i);
+                this._removeNPC(i);
             }
         }
 
         return hits;
     }
 
-    _removeMonster(index) {
-        const m = this.monsters[index];
+    _removeNPC(index) {
+        const m = this.npcs[index];
         m.alive = false;
         this.scene.remove(m.sprite.mesh);
         m.sprite.dispose();
-        this.monsters.splice(index, 1);
+        this.npcs.splice(index, 1);
     }
 
     get aliveCount() {
-        return this.monsters.length;
+        return this.npcs.length;
     }
 }

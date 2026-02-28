@@ -133,6 +133,17 @@ body {
     letter-spacing: 0.1em;
 }
 
+#hud-debug {
+    position: fixed;
+    bottom: 30px;
+    left: 30px;
+    font-size: 0.85rem;
+    color: #88aacc;
+    text-shadow: 0 0 4px rgba(80, 130, 180, 0.5);
+    letter-spacing: 0.05em;
+    opacity: 0.8;
+}
+
 /* Blood Overlay */
 #blood-overlay {
     position: fixed;
@@ -261,6 +272,12 @@ body {
     #hud-time {
         font-size: 0.9rem;
         top: 10px;
+        left: 15px;
+    }
+
+    #hud-debug {
+        font-size: 0.7rem;
+        bottom: 220px;
         left: 15px;
     }
 }
