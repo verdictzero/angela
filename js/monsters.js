@@ -116,11 +116,10 @@ export class MonsterManager {
             // Despawn if too far behind player
             const dx = vehiclePos.x - mpos.x;
             const dz = vehiclePos.z - mpos.z;
-            // Use dot product with player forward to check if behind
-            const playerFwd = new THREE.Vector3(
-                Math.sin(vehicleAngle), 0, -Math.cos(vehicleAngle)
-            );
-            const behind = -(dx * playerFwd.x + dz * playerFwd.z);
+            // Dot (moped→vehicle) with playerFwd is positive when moped is behind
+            const fwdX = Math.sin(vehicleAngle);
+            const fwdZ = -Math.cos(vehicleAngle);
+            const behind = dx * fwdX + dz * fwdZ;
             if (behind > DESPAWN_BEHIND) {
                 this._removeMonster(i);
                 continue;
