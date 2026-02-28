@@ -7,6 +7,7 @@
 
 import * as THREE from 'three';
 import { normalizeAngle, createCanvasTexture } from './utils.js';
+import { createUnlitMaterial } from './shaders.js';
 
 /**
  * Sprite direction indices:
@@ -277,5 +278,40 @@ export class DirectionalSprite {
         this._materials.front.dispose();
         this._materials.side.dispose();
         this._materials.back.dispose();
+    }
+}
+
+/**
+ * BillboardSprite — a Y-billboarded sprite with a single texture,
+ * rendered using the unlit ambient-tint shader.
+ */
+export class BillboardSprite {
+    constructor(texture, width = 2, height = 2) {
+        const geo = new THREE.PlaneGeometry(width, height);
+        // Anchor bottom of sprite at y=0
+        geo.translate(0, height / 2, 0);
+
+        const mat = createUnlitMaterial(texture, {
+            transparent: true,
+            alphaTest: 0.1,
+            side: THREE.DoubleSide,
+        });
+
+        this.mesh = new THREE.Mesh(geo, mat);
+    }
+
+    update(cameraPosition) {
+        const dx = cameraPosition.x - this.mesh.position.x;
+        const dz = cameraPosition.z - this.mesh.position.z;
+        this.mesh.rotation.y = Math.atan2(dx, dz);
+    }
+
+    setPosition(x, y, z) {
+        this.mesh.position.set(x, y, z);
+    }
+
+    dispose() {
+        this.mesh.geometry.dispose();
+        this.mesh.material.dispose();
     }
 }

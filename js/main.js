@@ -14,6 +14,7 @@ import { MonsterManager } from './monsters.js';
 import { GoreSystem } from './gore.js';
 import { HUD } from './hud.js';
 import { DayNightCycle } from './daynight.js';
+import { unlitUniforms } from './shaders.js';
 
 // ── Scene Setup ──────────────────────────────────────────────
 
@@ -125,6 +126,12 @@ function gameLoop() {
 
     // Day/night cycle (always runs, even on start screen)
     const intensity = dayNight.update(dt, ambient, dirLight, hemiLight, fog, scene);
+
+    // Sync shared unlit shader uniforms with day/night state
+    unlitUniforms.ambientTint.value.copy(dayNight.currentColors.ambientTint);
+    unlitUniforms.fogColor.value.copy(fog.color);
+    unlitUniforms.fogStart.value = fog.near;
+    unlitUniforms.fogEnd.value = fog.far;
 
     // Headlights follow day/night
     cockpit.setHeadlightIntensity(intensity.headlight);

@@ -1,45 +1,44 @@
 /**
- * Monster Manager
+ * Monster Manager — Moped Riders
  *
- * Spawns, updates, and manages monsters on the road.
- * Handles hit detection with the player vehicle.
+ * Spawns moped riders on the road that drive in the same direction
+ * as the player at varying slower speeds. Uses BillboardSprite with
+ * the unlit shader for ambient tint and fog.
  */
 
 import * as THREE from 'three';
-import { DirectionalSprite, generateMonsterSprites } from './sprites.js';
-import { randomRange, normalizeAngle } from './utils.js';
+import { BillboardSprite } from './sprites.js';
+import { randomRange } from './utils.js';
 
-const MONSTER_HIT_RADIUS = 2.5;      // hit detection radius
-const MONSTER_HIT_FORWARD = 4;       // how far in front of car to check
-const MAX_MONSTERS = 80;             // max alive monsters
-const SPAWN_AHEAD = 300;             // spawn this far ahead (m)
-const DESPAWN_BEHIND = 100;          // remove monsters this far behind
-const WANDER_SPEED = 1.5;            // base wander speed (m/s)
-const ALERT_RANGE = 30;              // distance to start facing player
-const MONSTER_TYPES = 4;             // number of sprite variants
+const HIT_RADIUS = 2.5;             // hit detection radius
+const HIT_FORWARD = 4;              // how far in front of car to check
+const MAX_MONSTERS = 80;
+const SPAWN_AHEAD = 300;
+const MOPED_SPEED_MIN = 5;          // m/s (~18 km/h)
+const MOPED_SPEED_MAX = 12;         // m/s (~43 km/h)
+const MOPED_WIDTH = 1.5;
+const MOPED_HEIGHT = 2.2;
 
-/**
- * Monster states
- */
-const STATE_IDLE = 0;
-const STATE_WANDER = 1;
-const STATE_ALERT = 2;
+// Shared texture — loaded once, reused by all mopeds
+let mopedTexture = null;
+
+function getMopedTexture() {
+    if (!mopedTexture) {
+        mopedTexture = new THREE.TextureLoader().load('assets/moped_guy.png');
+        mopedTexture.colorSpace = THREE.SRGBColorSpace;
+    }
+    return mopedTexture;
+}
 
 export class MonsterManager {
     constructor(scene) {
         this.scene = scene;
         this.monsters = [];
-        this._spriteCache = [];
         this._lastSpawnChunkIdx = -1;
-
-        // Pre-generate sprite textures for each variant
-        for (let i = 0; i < MONSTER_TYPES; i++) {
-            this._spriteCache.push(generateMonsterSprites(i));
-        }
     }
 
     /**
-     * Spawn monsters from road chunk spawn positions.
+     * Spawn moped riders from road chunk spawn positions.
      */
     spawnFromChunk(chunkIndex, spawnPositions) {
         if (chunkIndex <= this._lastSpawnChunkIdx) return;
@@ -47,24 +46,22 @@ export class MonsterManager {
 
         for (const spawn of spawnPositions) {
             if (this.monsters.length >= MAX_MONSTERS) break;
-            if (Math.random() > 0.6) continue; // not every position gets a monster
 
-            const variant = Math.floor(Math.random() * MONSTER_TYPES);
-            const textures = this._spriteCache[variant];
-            const sprite = new DirectionalSprite(textures, 1.8, 2.2);
+            // Only spawn on road (not sidewalks)
+            if (spawn.type !== 'road') continue;
+
+            // Skip some positions for variety
+            if (Math.random() > 0.5) continue;
+
+            const tex = getMopedTexture();
+            const sprite = new BillboardSprite(tex, MOPED_WIDTH, MOPED_HEIGHT);
             sprite.setPosition(spawn.position.x, spawn.position.y, spawn.position.z);
-            sprite.facingAngle = Math.random() * Math.PI * 2;
 
             const monster = {
                 sprite,
-                state: Math.random() > 0.4 ? STATE_WANDER : STATE_IDLE,
-                wanderAngle: Math.random() * Math.PI * 2,
-                wanderTimer: randomRange(2, 6),
-                speed: randomRange(0.5, WANDER_SPEED),
                 alive: true,
-                hp: 1,
-                variant,
-                spawnType: spawn.type
+                speed: randomRange(MOPED_SPEED_MIN, MOPED_SPEED_MAX),
+                forward: spawn.forward ? spawn.forward.clone() : new THREE.Vector3(0, 0, -1),
             };
 
             this.scene.add(sprite.mesh);
@@ -73,100 +70,50 @@ export class MonsterManager {
     }
 
     /**
-     * Update all monsters: AI, sprites, despawn.
+     * Update all mopeds: movement, billboarding, despawn.
      */
     update(dt, cameraPosition, vehiclePos, vehicleAngle) {
-        const playerPos2D = new THREE.Vector2(vehiclePos.x, vehiclePos.z);
-
         for (let i = this.monsters.length - 1; i >= 0; i--) {
             const m = this.monsters[i];
             if (!m.alive) continue;
 
             const mpos = m.sprite.mesh.position;
+
+            // Despawn if too far behind
             const dx = vehiclePos.x - mpos.x;
             const dz = vehiclePos.z - mpos.z;
             const dist = Math.sqrt(dx * dx + dz * dz);
 
-            // Despawn if too far behind
             if (dist > SPAWN_AHEAD + 50) {
                 this._removeMonster(i);
                 continue;
             }
 
-            // AI behavior
-            this._updateAI(m, dt, vehiclePos, dist);
+            // Drive forward along the road
+            mpos.x += m.forward.x * m.speed * dt;
+            mpos.z += m.forward.z * m.speed * dt;
 
-            // Update sprite direction/billboard
+            // Billboard toward camera
             m.sprite.update(cameraPosition);
         }
     }
 
-    _updateAI(monster, dt, playerPos, distToPlayer) {
-        const mpos = monster.sprite.mesh.position;
-
-        switch (monster.state) {
-            case STATE_IDLE:
-                // Occasionally switch to wander
-                monster.wanderTimer -= dt;
-                if (monster.wanderTimer <= 0) {
-                    monster.state = STATE_WANDER;
-                    monster.wanderAngle = Math.random() * Math.PI * 2;
-                    monster.wanderTimer = randomRange(3, 8);
-                }
-                // Face random directions slowly
-                monster.sprite.facingAngle += (Math.random() - 0.5) * 0.5 * dt;
-                break;
-
-            case STATE_WANDER:
-                // Move in wander direction
-                mpos.x += Math.sin(monster.wanderAngle) * monster.speed * dt;
-                mpos.z -= Math.cos(monster.wanderAngle) * monster.speed * dt;
-                monster.sprite.facingAngle = monster.wanderAngle;
-
-                monster.wanderTimer -= dt;
-                if (monster.wanderTimer <= 0) {
-                    monster.state = STATE_IDLE;
-                    monster.wanderTimer = randomRange(1, 4);
-                }
-                break;
-
-            case STATE_ALERT:
-                // Face toward player
-                const angleToPlayer = Math.atan2(
-                    playerPos.x - mpos.x,
-                    -(playerPos.z - mpos.z)
-                );
-                monster.sprite.facingAngle = angleToPlayer;
-                break;
-        }
-
-        // Switch to alert if player is close
-        if (distToPlayer < ALERT_RANGE && monster.state !== STATE_ALERT) {
-            monster.state = STATE_ALERT;
-        } else if (distToPlayer > ALERT_RANGE * 1.5 && monster.state === STATE_ALERT) {
-            monster.state = STATE_WANDER;
-            monster.wanderAngle = Math.random() * Math.PI * 2;
-            monster.wanderTimer = randomRange(2, 5);
-        }
-    }
-
     /**
-     * Check for vehicle-monster collisions.
-     * Returns array of hit monster positions for gore spawning.
+     * Check for vehicle-moped collisions.
+     * Returns array of hit positions for gore spawning.
      */
     checkHits(vehiclePos, vehicleAngle, vehicleSpeed) {
-        if (Math.abs(vehicleSpeed) < 3) return []; // need some speed to hit
+        if (Math.abs(vehicleSpeed) < 3) return [];
 
         const hits = [];
         const forward = new THREE.Vector3(
             Math.sin(vehicleAngle), 0, -Math.cos(vehicleAngle)
         );
 
-        // Check area in front of car
         const checkPos = new THREE.Vector3(
-            vehiclePos.x + forward.x * MONSTER_HIT_FORWARD * 0.5,
+            vehiclePos.x + forward.x * HIT_FORWARD * 0.5,
             vehiclePos.y,
-            vehiclePos.z + forward.z * MONSTER_HIT_FORWARD * 0.5
+            vehiclePos.z + forward.z * HIT_FORWARD * 0.5
         );
 
         for (let i = this.monsters.length - 1; i >= 0; i--) {
@@ -178,10 +125,10 @@ export class MonsterManager {
             const dz = checkPos.z - mpos.z;
             const dist = Math.sqrt(dx * dx + dz * dz);
 
-            if (dist < MONSTER_HIT_RADIUS) {
+            if (dist < HIT_RADIUS) {
                 hits.push({
                     position: mpos.clone(),
-                    variant: m.variant,
+                    variant: 0,
                     velocity: forward.clone().multiplyScalar(vehicleSpeed * 0.5)
                 });
                 this._removeMonster(i);

@@ -490,6 +490,7 @@ export class RoadManager {
                     pt.position.x + pt.right.x * roadLat, 0,
                     pt.position.z + pt.right.z * roadLat
                 ),
+                forward: pt.forward.clone(),
                 roadIndex: i, type: 'road'
             });
             // On sidewalk occasionally
@@ -501,6 +502,7 @@ export class RoadManager {
                         pt.position.x + pt.right.x * swLat, CURB_HEIGHT,
                         pt.position.z + pt.right.z * swLat
                     ),
+                    forward: pt.forward.clone(),
                     roadIndex: i, type: 'sidewalk'
                 });
             }

@@ -70,6 +70,16 @@ const TINT = {
     dusk:  [255, 90, 40, 0.14],
 };
 
+// Ambient tint for unlit shader — multiplied with base textures.
+// At noon ≈ white (full texture color), at night ≈ dark blue.
+// Matches the galvarius pattern: base_color * ambient_tint → fog blend.
+const AMBIENT_TINT = {
+    night: new THREE.Color(0.08, 0.08, 0.15),
+    dawn:  new THREE.Color(1.0, 0.85, 0.6),
+    day:   new THREE.Color(1.0, 0.98, 0.93),
+    dusk:  new THREE.Color(0.9, 0.6, 0.4),
+};
+
 export class DayNightCycle {
     constructor(scene) {
         this.scene = scene;
@@ -94,6 +104,7 @@ export class DayNightCycle {
         this.currentColors = {
             sky: new THREE.Color(),
             fog: new THREE.Color(),
+            ambientTint: new THREE.Color(1, 1, 1),
         };
         this.currentIntensity = { ...INTENSITY.day };
         this.isNight = false;
@@ -190,6 +201,12 @@ export class DayNightCycle {
         // Interpolate colors
         this._lerpColor(this.currentColors.sky, cA.sky, cB.sky, t);
         this._lerpColor(this.currentColors.fog, cA.fog, cB.fog, t);
+
+        // Ambient tint for unlit shader materials
+        this._lerpColor(
+            this.currentColors.ambientTint,
+            AMBIENT_TINT[phase.a], AMBIENT_TINT[phase.b], t
+        );
 
         // Apply to scene
         scene.background.copy(this.currentColors.sky);
