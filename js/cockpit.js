@@ -25,6 +25,7 @@ const WHEEL_PARALLAX = 1.0;    // closer layer sways more
 
 // Dashboard sizing
 const DASH_WIDTH_PAD = 1.15;   // 15% wider than viewport to cover edges during sway
+const DASH_MAX_HEIGHT = 0.33;  // cap at bottom third of viewport
 
 // Steering wheel sizing & placement
 const WHEEL_SCALE = 0.65;      // fraction of visible height
@@ -103,17 +104,27 @@ export class Cockpit {
         const fov = this.camera.fov * Math.PI / 180;
         const aspect = this.camera.aspect;
 
-        // Dashboard — fill width, pin to bottom
+        // Dashboard — fill width, pin to bottom, cap at bottom third
         if (this.dashMesh) {
             const d = Math.abs(DASH_Z);
             const visH = 2 * d * Math.tan(fov / 2);
             const visW = visH * aspect;
 
             const dashW = visW * DASH_WIDTH_PAD;
-            const dashH = dashW / this.dashAspect;
+            const dashH_full = dashW / this.dashAspect;
+            const maxH = visH * DASH_MAX_HEIGHT;
+            const dashH = Math.min(dashH_full, maxH);
 
             this.dashMesh.scale.set(dashW, dashH, 1);
             this.dashMesh.position.y = -visH / 2 + dashH / 2;
+
+            // If height was capped, crop from the top of the texture
+            // (trims the transparent windshield area, keeps the dashboard body)
+            const uvTop = dashH / dashH_full;
+            const uv = this.dashMesh.geometry.getAttribute('uv');
+            uv.setY(0, uvTop);  // top-left vertex
+            uv.setY(1, uvTop);  // top-right vertex
+            uv.needsUpdate = true;
         }
 
         // Steering wheel — aligned with column opening on the left side of the dash
