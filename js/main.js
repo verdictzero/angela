@@ -170,8 +170,11 @@ function gameLoop() {
     // Spawn NPCs in new chunks
     spawnNPCsForNewChunks();
 
-    // Update killable NPCs (pass road points so they follow the road)
-    killableNPCs.update(dt, camera.position, vehicle.position, vehicle.angle, road.points);
+    // Update camera — LHD offset (before NPCs so camera.rotation.y is current)
+    updateCamera(dt);
+
+    // Update killable NPCs (billboard aligned to camera plane, not camera position)
+    killableNPCs.update(dt, camera.rotation.y, vehicle.position, vehicle.angle, road.points);
 
     // Check NPC hits
     const hits = killableNPCs.checkHits(vehicle.position, vehicle.angle, vehicle.speed);
@@ -186,9 +189,6 @@ function gameLoop() {
 
     // Update cockpit
     cockpit.update(dt, vehicle);
-
-    // Update camera — LHD offset
-    updateCamera(dt);
 
     // Update HUD — include debug info (chunk ID, coordinates, NPC count)
     const currentChunk = road.getChunkAt(vehicle.position);

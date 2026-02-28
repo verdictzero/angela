@@ -300,10 +300,8 @@ export class BillboardSprite {
         this.mesh = new THREE.Mesh(geo, mat);
     }
 
-    update(cameraPosition) {
-        const dx = cameraPosition.x - this.mesh.position.x;
-        const dz = cameraPosition.z - this.mesh.position.z;
-        this.mesh.rotation.y = Math.atan2(dx, dz);
+    update(cameraYaw) {
+        this.mesh.rotation.y = cameraYaw;
     }
 
     setPosition(x, y, z) {

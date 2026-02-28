@@ -72,7 +72,7 @@ export class KillableNPCManager {
      * Update all NPCs: advance along road spine, billboard, despawn.
      * roadPoints is the full road.points array.
      */
-    update(dt, cameraPosition, vehiclePos, vehicleAngle, roadPoints) {
+    update(dt, cameraYaw, vehiclePos, vehicleAngle, roadPoints) {
         const pointSpacing = 4; // must match POINT_SPACING in road.js
         const maxIdx = roadPoints.length - 1;
 
@@ -124,8 +124,8 @@ export class KillableNPCManager {
                 continue;
             }
 
-            // Billboard toward camera
-            m.sprite.update(cameraPosition);
+            // Billboard toward camera plane
+            m.sprite.update(cameraYaw);
         }
     }
 
