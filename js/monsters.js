@@ -12,12 +12,12 @@ import { randomRange } from './utils.js';
 
 const HIT_RADIUS = 2.5;             // hit detection radius
 const HIT_FORWARD = 4;              // how far in front of car to check
-const MAX_MONSTERS = 80;
+const MAX_MONSTERS = 300;
 const SPAWN_AHEAD = 300;
 const MOPED_SPEED_MIN = 5;          // m/s (~18 km/h)
 const MOPED_SPEED_MAX = 12;         // m/s (~43 km/h)
-const MOPED_WIDTH = 1.5;
 const MOPED_HEIGHT = 2.2;
+const MOPED_WIDTH = MOPED_HEIGHT * 0.4;  // maintain source image aspect ratio (250x625)
 
 // Shared texture — loaded once, reused by all mopeds
 let mopedTexture = null;
@@ -51,9 +51,6 @@ export class MonsterManager {
 
             // Only spawn on road (not sidewalks)
             if (spawn.type !== 'road') continue;
-
-            // Skip some positions for variety
-            if (Math.random() > 0.5) continue;
 
             const tex = getMopedTexture();
             const sprite = new BillboardSprite(tex, MOPED_WIDTH, MOPED_HEIGHT);

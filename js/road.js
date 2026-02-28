@@ -12,12 +12,12 @@
 import * as THREE from 'three';
 import { randomRange, clamp, createCanvasTexture } from './utils.js';
 
-// ── Road dimensions ────────────────────────────────────────────
-const ROAD_HALF_WIDTH = 3.5;       // 2 lanes, each 3.5m
-const SHOULDER_WIDTH = 1.5;
-const CURB_WIDTH = 0.3;
+// ── Road dimensions (2x wider) ─────────────────────────────────
+const ROAD_HALF_WIDTH = 7.0;       // 2 lanes, each 7m
+const SHOULDER_WIDTH = 3.0;
+const CURB_WIDTH = 0.6;
 const CURB_HEIGHT = 0.15;
-const SIDEWALK_WIDTH = 3.0;
+const SIDEWALK_WIDTH = 6.0;
 const SHOULDER_INNER = ROAD_HALF_WIDTH;
 const SHOULDER_OUTER = ROAD_HALF_WIDTH + SHOULDER_WIDTH;
 const CURB_INNER = SHOULDER_OUTER;
@@ -287,12 +287,12 @@ export class RoadManager {
 
         // ── Lane markings ──────────────────────────────────────
         // Double yellow center line (2 lines with small gap)
-        this._addSolidLine(group, startIdx, endIdx, -0.15, 0.02, 0.07, this._yellowMat);
-        this._addSolidLine(group, startIdx, endIdx, 0.15, 0.02, 0.07, this._yellowMat);
+        this._addSolidLine(group, startIdx, endIdx, -0.20, 0.02, 0.08, this._yellowMat);
+        this._addSolidLine(group, startIdx, endIdx, 0.20, 0.02, 0.08, this._yellowMat);
 
         // White edge lines (where road meets shoulder)
-        this._addSolidLine(group, startIdx, endIdx, -ROAD_HALF_WIDTH + 0.15, 0.02, 0.08, this._markingMat);
-        this._addSolidLine(group, startIdx, endIdx, ROAD_HALF_WIDTH - 0.15, 0.02, 0.08, this._markingMat);
+        this._addSolidLine(group, startIdx, endIdx, -ROAD_HALF_WIDTH + 0.25, 0.02, 0.10, this._markingMat);
+        this._addSolidLine(group, startIdx, endIdx, ROAD_HALF_WIDTH - 0.25, 0.02, 0.10, this._markingMat);
 
         const chunk = { id: this._nextChunkId++, group, startIdx, endIdx, startDist: startIdx * POINT_SPACING };
         this.scene.add(group);
@@ -481,18 +481,21 @@ export class RoadManager {
 
     _spawnPositionsForChunk(chunk) {
         const positions = [];
-        for (let i = chunk.startIdx + 5; i < chunk.endIdx - 5; i += 8) {
+        for (let i = chunk.startIdx + 2; i < chunk.endIdx - 2; i += 3) {
             const pt = this.points[i];
-            // On road
-            const roadLat = randomRange(-ROAD_HALF_WIDTH + 0.8, ROAD_HALF_WIDTH - 0.8);
-            positions.push({
-                position: new THREE.Vector3(
-                    pt.position.x + pt.right.x * roadLat, 0,
-                    pt.position.z + pt.right.z * roadLat
-                ),
-                forward: pt.forward.clone(),
-                roadIndex: i, type: 'road'
-            });
+            // Spawn multiple mopeds across the road width
+            const laneCount = 2 + Math.floor(Math.random() * 2); // 2-3 per row
+            for (let l = 0; l < laneCount; l++) {
+                const roadLat = randomRange(-ROAD_HALF_WIDTH + 1.5, ROAD_HALF_WIDTH - 1.5);
+                positions.push({
+                    position: new THREE.Vector3(
+                        pt.position.x + pt.right.x * roadLat, 0,
+                        pt.position.z + pt.right.z * roadLat
+                    ),
+                    forward: pt.forward.clone(),
+                    roadIndex: i, type: 'road'
+                });
+            }
             // On sidewalk occasionally
             if (Math.random() > 0.5) {
                 const side = Math.random() > 0.5 ? 1 : -1;
