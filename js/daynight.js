@@ -7,6 +7,7 @@
  */
 
 import * as THREE from 'three';
+import { Lensflare, LensflareElement } from 'three/addons/objects/Lensflare.js';
 import { lerp, clamp, smoothstep } from './utils.js';
 
 // Cycle duration in seconds (one full day)
@@ -57,10 +58,10 @@ const COLORS = {
 };
 
 const INTENSITY = {
-    night: { ambient: 0.3, sun: 0.15, hemi: 0.2, headlight: 50, fogNear: 5,  fogFar: 50 },
-    dawn:  { ambient: 0.8, sun: 0.7,  hemi: 0.5, headlight: 15, fogNear: 10, fogFar: 80 },
-    day:   { ambient: 1.5, sun: 1.4,  hemi: 0.9, headlight: 5,  fogNear: 20, fogFar: 100 },
-    dusk:  { ambient: 0.6, sun: 0.5,  hemi: 0.4, headlight: 25, fogNear: 8,  fogFar: 65 },
+    night: { ambient: 0.3, sun: 0.15, hemi: 0.2, headlight: 50, fogNear: 15, fogFar: 90 },
+    dawn:  { ambient: 0.8, sun: 0.7,  hemi: 0.5, headlight: 15, fogNear: 25, fogFar: 140 },
+    day:   { ambient: 1.5, sun: 1.4,  hemi: 0.9, headlight: 5,  fogNear: 40, fogFar: 180 },
+    dusk:  { ambient: 0.6, sun: 0.5,  hemi: 0.4, headlight: 25, fogNear: 18, fogFar: 110 },
 };
 
 // Fullscreen color tint per phase — [r, g, b, opacity]
@@ -82,6 +83,26 @@ const AMBIENT_TINT = {
 // Sun/moon orbit radius
 const ORBIT_RADIUS = 300;
 
+/**
+ * Generate a procedural radial-gradient lens flare texture.
+ */
+function createFlareTexture(size, r, g, b) {
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    const half = size / 2;
+    const gradient = ctx.createRadialGradient(half, half, 0, half, half, half);
+    gradient.addColorStop(0, `rgba(${r},${g},${b},1.0)`);
+    gradient.addColorStop(0.2, `rgba(${r},${g},${b},0.8)`);
+    gradient.addColorStop(0.4, `rgba(${r},${g},${b},0.3)`);
+    gradient.addColorStop(1, `rgba(${r},${g},${b},0)`);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, size, size);
+    const tex = new THREE.CanvasTexture(canvas);
+    return tex;
+}
+
 export class DayNightCycle {
     constructor(scene) {
         this.scene = scene;
@@ -102,6 +123,19 @@ export class DayNightCycle {
         // Moon mesh
         this._moonMesh = this._createMoonMesh();
         this._skyGroup.add(this._moonMesh);
+
+        // Lens flares
+        this._sunFlare = this._createLensflare(
+            createFlareTexture(256, 255, 220, 100),
+            createFlareTexture(256, 255, 200, 80)
+        );
+        this._sunMesh.add(this._sunFlare);
+
+        this._moonFlare = this._createLensflare(
+            createFlareTexture(256, 200, 200, 230),
+            createFlareTexture(256, 180, 180, 210)
+        );
+        this._moonMesh.add(this._moonFlare);
 
         this.scene.add(this._skyGroup);
 
@@ -177,6 +211,17 @@ export class DayNightCycle {
         const mesh = new THREE.Mesh(geo, mat);
         mesh.visible = false;
         return mesh;
+    }
+
+    _createLensflare(coreTexture, haloTexture) {
+        const sizes = [300, 600, 150, 100];
+        const flare = new Lensflare();
+        flare.addElement(new LensflareElement(coreTexture, sizes[0], 0));
+        flare.addElement(new LensflareElement(haloTexture, sizes[1], 0));
+        flare.addElement(new LensflareElement(haloTexture, sizes[2], 0.4));
+        flare.addElement(new LensflareElement(haloTexture, sizes[3], 0.7));
+        flare.userData.baseSizes = sizes;
+        return flare;
     }
 
     /**
@@ -332,8 +377,15 @@ export class DayNightCycle {
             const horizonT = 1 - clamp(sunY / ORBIT_RADIUS, 0, 1);
             const sunColor = new THREE.Color(0xffdd44).lerp(new THREE.Color(0xff6622), horizonT * 0.7);
             this._sunMesh.material.color.copy(sunColor);
+            // Scale flare with horizon fade
+            this._sunFlare.visible = horizonFade > 0.05;
+            const sunBases = this._sunFlare.userData.baseSizes;
+            for (let i = 0; i < this._sunFlare.elements.length; i++) {
+                this._sunFlare.elements[i].size = sunBases[i] * horizonFade;
+            }
         } else {
             this._sunMesh.visible = false;
+            this._sunFlare.visible = false;
         }
 
         // Moon visibility
@@ -342,8 +394,15 @@ export class DayNightCycle {
             this._moonMesh.visible = true;
             const horizonFade = clamp((moonY + 10) / 40, 0, 1);
             this._moonMesh.material.opacity = 0.85 * horizonFade;
+            // Scale flare with horizon fade
+            this._moonFlare.visible = horizonFade > 0.05;
+            const moonBases = this._moonFlare.userData.baseSizes;
+            for (let i = 0; i < this._moonFlare.elements.length; i++) {
+                this._moonFlare.elements[i].size = moonBases[i] * horizonFade;
+            }
         } else {
             this._moonMesh.visible = false;
+            this._moonFlare.visible = false;
         }
     }
 

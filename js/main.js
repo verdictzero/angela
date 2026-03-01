@@ -6,6 +6,9 @@
  */
 
 import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { InputManager } from './input.js';
 import { RoadManager } from './road.js';
 import { Vehicle } from './vehicle.js';
@@ -38,8 +41,21 @@ scene.background = new THREE.Color(0x1a2a1a);
 
 // Camera
 const camera = new THREE.PerspectiveCamera(
-    75, window.innerWidth / window.innerHeight, 0.1, 500
+    75, window.innerWidth / window.innerHeight, 0.1, 600
 );
+
+// ── Post-Processing ──────────────────────────────────────────
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+
+const bloomPass = new UnrealBloomPass(
+    new THREE.Vector2(window.innerWidth, window.innerHeight),
+    0.4,   // strength
+    0.5,   // radius
+    0.85   // threshold
+);
+composer.addPass(bloomPass);
 
 // ── Lighting ──────────────────────────────────────────────────
 
@@ -116,6 +132,7 @@ window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    composer.setSize(window.innerWidth, window.innerHeight);
 });
 
 // ── Game Loop ─────────────────────────────────────────────────
@@ -156,7 +173,7 @@ function gameLoop() {
 
     if (!gameStarted) {
         updateCamera(dt);
-        renderer.render(scene, camera);
+        composer.render();
         return;
     }
 
@@ -212,7 +229,7 @@ function gameLoop() {
     });
 
     // Render
-    renderer.render(scene, camera);
+    composer.render();
 }
 
 function updateCamera(dt) {
