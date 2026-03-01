@@ -2,7 +2,7 @@
  * Day/Night Cycle System
  *
  * Smoothly transitions through dawn → day → dusk → night.
- * Controls sky color, fog, ambient/directional lighting,
+ * Controls sky gradient dome, fog, ambient/directional lighting,
  * headlight intensity, stars, sun/moon with bloom glow, and procedural clouds.
  */
 
@@ -80,6 +80,26 @@ const AMBIENT_TINT = {
     dusk:  new THREE.Color(0.9, 0.6, 0.4),
 };
 
+// Sky gradient: zenith (top) → horizon (edge) per phase
+const SKY_GRADIENT = {
+    night: {
+        zenith:  new THREE.Color(0x030308),
+        horizon: new THREE.Color(0x0c0c22),
+    },
+    dawn: {
+        zenith:  new THREE.Color(0x5544aa),
+        horizon: new THREE.Color(0xffaa66),
+    },
+    day: {
+        zenith:  new THREE.Color(0x2266aa),
+        horizon: new THREE.Color(0x99bbdd),
+    },
+    dusk: {
+        zenith:  new THREE.Color(0x442266),
+        horizon: new THREE.Color(0xee7744),
+    },
+};
+
 // Cloud tinting per phase
 const CLOUD_COLOR = {
     night: new THREE.Color(0x0c0c1a),
@@ -91,7 +111,7 @@ const CLOUD_COLOR = {
 const CLOUD_OPACITY = {
     night: 0.06,
     dawn:  0.55,
-    day:   0.45,
+    day:   0.50,
     dusk:  0.50,
 };
 
@@ -100,7 +120,7 @@ const ORBIT_RADIUS = 300;
 
 // Cloud system constants
 const CLOUD_DOME_RADIUS = 350;
-const CLOUD_COUNT = 28;
+const CLOUD_COUNT = 50;
 const CLOUD_WIND_SPEED = 0.012; // radians per second
 
 // ── Noise helpers (procedural cloud textures) ────────────────
@@ -140,9 +160,6 @@ function _fbm(x, y, octaves) {
 
 // ── Texture generators ───────────────────────────────────────
 
-/**
- * Generate a procedural radial-gradient lens flare texture.
- */
 function createFlareTexture(size, r, g, b) {
     const canvas = document.createElement('canvas');
     canvas.width = size;
@@ -159,10 +176,6 @@ function createFlareTexture(size, r, g, b) {
     return new THREE.CanvasTexture(canvas);
 }
 
-/**
- * Generate a soft glow texture for celestial corona effect.
- * Wider falloff than flare for a large, soft halo.
- */
 function createGlowTexture(size, r, g, b) {
     const canvas = document.createElement('canvas');
     canvas.width = size;
@@ -181,10 +194,6 @@ function createGlowTexture(size, r, g, b) {
     return new THREE.CanvasTexture(canvas);
 }
 
-/**
- * Generate a procedural cloud texture using fractal noise.
- * Produces a soft, elliptical cloud shape with internal detail.
- */
 function createCloudTexture(size, seed) {
     const canvas = document.createElement('canvas');
     canvas.width = size;
@@ -223,6 +232,33 @@ function createCloudTexture(size, seed) {
     return new THREE.CanvasTexture(canvas);
 }
 
+// ── Sky dome shader ──────────────────────────────────────────
+
+const SKY_DOME_VS = /* glsl */ `
+varying vec3 vDirection;
+void main() {
+    vDirection = position;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`;
+
+const SKY_DOME_FS = /* glsl */ `
+uniform vec3 zenithColor;
+uniform vec3 horizonColor;
+varying vec3 vDirection;
+void main() {
+    float h = normalize(vDirection).y;
+    // Above horizon: gradient from horizon to zenith
+    float t = clamp(h, 0.0, 1.0);
+    t = pow(t, 0.4);
+    vec3 color = mix(horizonColor, zenithColor, t);
+    // Below horizon: darken gently toward ground
+    float below = clamp(-h * 3.0, 0.0, 1.0);
+    color *= 1.0 - below * 0.4;
+    gl_FragColor = vec4(color, 1.0);
+}
+`;
+
 // ── DayNightCycle ────────────────────────────────────────────
 
 export class DayNightCycle {
@@ -231,11 +267,16 @@ export class DayNightCycle {
         this.time = 0.35; // Start in early daytime
         this.speed = 1.0 / CYCLE_DURATION;
 
-        // Sky group holds stars, sun, moon, clouds — moved together in main.js
+        // Sky group holds dome, stars, sun, moon, clouds — moved together in main.js
         this._skyGroup = new THREE.Group();
 
-        // Stars
+        // Sky gradient dome (renders first, behind everything)
+        this._skyDome = this._createSkyDome();
+        this._skyGroup.add(this._skyDome);
+
+        // Stars (behind clouds)
         this._stars = this._createStars();
+        this._stars.renderOrder = -2;
         this._skyGroup.add(this._stars);
 
         // Sun mesh + glow corona
@@ -287,10 +328,35 @@ export class DayNightCycle {
         this.currentColors = {
             sky: new THREE.Color(),
             fog: new THREE.Color(),
+            zenith: new THREE.Color(),
+            horizon: new THREE.Color(),
             ambientTint: new THREE.Color(1, 1, 1),
         };
         this.currentIntensity = { ...INTENSITY.day };
         this.isNight = false;
+    }
+
+    /**
+     * Inverted sphere with a zenith-to-horizon gradient shader.
+     */
+    _createSkyDome() {
+        const geo = new THREE.SphereGeometry(450, 32, 16);
+        const mat = new THREE.ShaderMaterial({
+            uniforms: {
+                zenithColor:  { value: new THREE.Color(0x2266aa) },
+                horizonColor: { value: new THREE.Color(0x99bbdd) },
+            },
+            vertexShader: SKY_DOME_VS,
+            fragmentShader: SKY_DOME_FS,
+            side: THREE.BackSide,
+            depthWrite: false,
+            fog: false,
+            toneMapped: false,
+        });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.renderOrder = -10;
+        this._skyDomeMat = mat;
+        return mesh;
     }
 
     _createStars() {
@@ -347,9 +413,6 @@ export class DayNightCycle {
         return mesh;
     }
 
-    /**
-     * Create an additive glow sprite for celestial corona effect.
-     */
     _createGlow(scale, r, g, b) {
         const tex = createGlowTexture(256, r, g, b);
         const mat = new THREE.SpriteMaterial({
@@ -384,7 +447,7 @@ export class DayNightCycle {
 
     /**
      * Create procedural cloud system using InstancedMesh on a sky dome.
-     * 28 cloud billboards in 2 altitude bands, single draw call.
+     * 50 cloud billboards in 3 altitude bands, single draw call.
      */
     _createClouds() {
         const tex = createCloudTexture(256, 1);
@@ -395,7 +458,7 @@ export class DayNightCycle {
             depthWrite: false,
             side: THREE.DoubleSide,
             fog: false,
-            opacity: 0.45,
+            opacity: 0.5,
             color: 0xeeeeff,
         });
 
@@ -406,19 +469,26 @@ export class DayNightCycle {
         const center = new THREE.Vector3(0, 0, 0);
 
         for (let i = 0; i < CLOUD_COUNT; i++) {
-            // Two altitude bands: high (0-13) and mid (14-27)
-            const band = i < 14 ? 0 : 1;
-            const bandIdx = band === 0 ? i : i - 14;
-            const bandCount = 14;
+            // Three altitude bands: high (0-15), mid (16-33), low (34-49)
+            let band, bandIdx, bandCount;
+            if (i < 16) {
+                band = 0; bandIdx = i; bandCount = 16;
+            } else if (i < 34) {
+                band = 1; bandIdx = i - 16; bandCount = 18;
+            } else {
+                band = 2; bandIdx = i - 34; bandCount = 16;
+            }
 
             // Distribute around full circle with jitter
             const baseTheta = (bandIdx / bandCount) * Math.PI * 2;
-            const theta = baseTheta + (Math.random() - 0.5) * 0.35;
+            const theta = baseTheta + (Math.random() - 0.5) * 0.4;
 
-            // phi: angle from zenith. Band 0 = higher sky, band 1 = lower
+            // phi: angle from zenith per band
             const phi = band === 0
-                ? 0.3 + Math.random() * 0.3
-                : 0.65 + Math.random() * 0.4;
+                ? 0.25 + Math.random() * 0.3   // high sky
+                : band === 1
+                    ? 0.55 + Math.random() * 0.3 // mid sky
+                    : 0.85 + Math.random() * 0.3; // lower sky
 
             const x = CLOUD_DOME_RADIUS * Math.sin(phi) * Math.cos(theta);
             const y = CLOUD_DOME_RADIUS * Math.cos(phi);
@@ -428,8 +498,8 @@ export class DayNightCycle {
             dummy.lookAt(center);
 
             // Random cloud dimensions
-            const scaleX = 55 + Math.random() * 75;
-            const scaleY = 22 + Math.random() * 28;
+            const scaleX = 50 + Math.random() * 80;
+            const scaleY = 20 + Math.random() * 28;
             dummy.scale.set(scaleX, scaleY, 1);
 
             dummy.updateMatrix();
@@ -441,9 +511,6 @@ export class DayNightCycle {
         return mesh;
     }
 
-    /**
-     * Get the interpolation factor between two phases.
-     */
     _getPhaseBlend(time) {
         if (time < NIGHT_END) {
             return { a: 'night', b: 'night', t: 0 };
@@ -482,7 +549,6 @@ export class DayNightCycle {
 
     /**
      * Update cycle. Call every frame.
-     * Returns current state for external systems.
      */
     update(dt, ambientLight, dirLight, hemiLight, fog, scene) {
         this.time += this.speed * dt;
@@ -493,7 +559,7 @@ export class DayNightCycle {
         const cB = COLORS[phase.b];
         const t = phase.t;
 
-        // Interpolate colors
+        // Interpolate legacy sky/fog colors (used by other systems)
         this._lerpColor(this.currentColors.sky, cA.sky, cB.sky, t);
         this._lerpColor(this.currentColors.fog, cA.fog, cB.fog, t);
 
@@ -503,9 +569,21 @@ export class DayNightCycle {
             AMBIENT_TINT[phase.a], AMBIENT_TINT[phase.b], t
         );
 
-        // Apply to scene — fog matches sky for seamless horizon blend
-        scene.background.copy(this.currentColors.sky);
-        fog.color.copy(this.currentColors.sky);
+        // Interpolate sky gradient colors
+        const gA = SKY_GRADIENT[phase.a];
+        const gB = SKY_GRADIENT[phase.b];
+        this._lerpColor(this.currentColors.zenith, gA.zenith, gB.zenith, t);
+        this._lerpColor(this.currentColors.horizon, gA.horizon, gB.horizon, t);
+
+        // Update sky dome shader
+        this._skyDomeMat.uniforms.zenithColor.value.copy(this.currentColors.zenith);
+        this._skyDomeMat.uniforms.horizonColor.value.copy(this.currentColors.horizon);
+
+        // Scene background = horizon as fallback behind dome
+        scene.background.copy(this.currentColors.horizon);
+
+        // Fog blends toward horizon color for seamless sky-ground transition
+        fog.color.copy(this.currentColors.horizon);
 
         // Interpolate and apply intensities
         this.currentIntensity = this._lerpIntensity(phase.a, phase.b, t);
@@ -572,9 +650,6 @@ export class DayNightCycle {
         return this.currentIntensity;
     }
 
-    /**
-     * Update sun and moon mesh positions, glow, and visibility.
-     */
     _updateSunMoon() {
         // Sun orbits based on cycle time — peaks at midday (time=0.5)
         const sunOrbitAngle = (this.time - 0.25) * Math.PI * 2;
@@ -589,19 +664,15 @@ export class DayNightCycle {
         // Sun visibility, color, and glow
         if (sunY > -10) {
             this._sunMesh.visible = true;
-            // Fade near horizon
             const horizonFade = clamp((sunY + 10) / 40, 0, 1);
             this._sunMesh.material.opacity = horizonFade;
-            // Shift to orange near horizon
             const horizonT = 1 - clamp(sunY / ORBIT_RADIUS, 0, 1);
             const sunColor = new THREE.Color(0xffee66).lerp(new THREE.Color(0xff6622), horizonT * 0.7);
             this._sunMesh.material.color.copy(sunColor);
 
-            // Glow corona sprite
             this._sunGlow.visible = true;
             this._sunGlow.material.opacity = horizonFade * 0.9;
 
-            // Scale flare with horizon fade
             this._sunFlare.visible = horizonFade > 0.05;
             const sunBases = this._sunFlare.userData.baseSizes;
             const sunEls = this._sunFlare.userData.elements;
@@ -621,11 +692,9 @@ export class DayNightCycle {
             const horizonFade = clamp((moonY + 10) / 40, 0, 1);
             this._moonMesh.material.opacity = 0.85 * horizonFade;
 
-            // Glow corona sprite
             this._moonGlow.visible = true;
             this._moonGlow.material.opacity = horizonFade * 0.6;
 
-            // Scale flare with horizon fade
             this._moonFlare.visible = horizonFade > 0.05;
             const moonBases = this._moonFlare.userData.baseSizes;
             const moonEls = this._moonFlare.userData.elements;
@@ -639,38 +708,25 @@ export class DayNightCycle {
         }
     }
 
-    /**
-     * Update cloud wind drift and sky-synced color/opacity.
-     */
     _updateClouds(dt, phaseA, phaseB, t) {
-        // Slowly rotate cloud dome for wind effect
         this._cloudGroup.rotation.y += CLOUD_WIND_SPEED * dt;
 
-        // Sync cloud color with current sky phase
         const cA = CLOUD_COLOR[phaseA];
         const cB = CLOUD_COLOR[phaseB];
         this._cloudMat.color.copy(cA).lerp(cB, t);
 
-        // Sync cloud opacity with current sky phase
         const oA = CLOUD_OPACITY[phaseA];
         const oB = CLOUD_OPACITY[phaseB];
         this._cloudMat.opacity = lerp(oA, oB, t);
     }
 
-    /**
-     * Star visibility: 0 during day and dusk, fades in after DUSK_END, fades out during dawn.
-     */
     _getStarVisibility() {
         if (this.time < NIGHT_END) return 1;
         if (this.time < DAWN_END) return 1 - smoothstep(NIGHT_END, DAWN_END, this.time);
         if (this.time < DUSK_END) return 0;
-        // Fade in after dusk ends
         return smoothstep(DUSK_END, DUSK_END + 0.05, this.time);
     }
 
-    /**
-     * Get how "night" it currently is (0 = full day, 1 = full night).
-     */
     _getNightness() {
         if (this.time < NIGHT_END) return 1;
         if (this.time < DAWN_END) return 1 - smoothstep(NIGHT_END, DAWN_END, this.time);
@@ -679,25 +735,16 @@ export class DayNightCycle {
         return 1;
     }
 
-    /**
-     * Get the sky group (stars + sun + moon + clouds) for repositioning.
-     */
     getStarDome() {
         return this._skyGroup;
     }
 
-    /**
-     * Get a human-readable time string.
-     */
     getTimeString() {
         const hours = Math.floor(this.time * 24);
         const minutes = Math.floor((this.time * 24 - hours) * 60);
         return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
     }
 
-    /**
-     * Get phase name for HUD display.
-     */
     getPhaseName() {
         if (this.time < NIGHT_END) return 'NIGHT';
         if (this.time < DAWN_END) return 'DAWN';
