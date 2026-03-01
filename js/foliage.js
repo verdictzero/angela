@@ -260,7 +260,7 @@ export class FoliageManager {
 
         // Billboard uniform — computed once from camera direction
         const dir = camera.getWorldDirection(_camDir);
-        const rotY = Math.atan2(dir.x, dir.z);
+        const rotY = Math.atan2(dir.x, -dir.z);
         for (const md of this._meshes.values()) {
             md.material.uniforms.billboardRotY.value = rotY;
         }
