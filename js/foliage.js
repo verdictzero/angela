@@ -1,22 +1,20 @@
 /**
- * Foliage Manager — World-Grid Billboard Vegetation
+ * Foliage Manager — InstancedMesh Billboard Vegetation
  *
  * Spawns foliage sprites (ferns, bushes, juvenile trees, fir trees)
- * using a world-space grid system. Vegetation covers all terrain
- * (not just near road), with road/shoulder/sidewalk avoidance.
- * Distance culling keeps sprite count manageable.
+ * using a world-space grid system. Uses InstancedMesh (one per texture)
+ * to render all instances in minimal draw calls. Billboard rotation
+ * is handled via a shader uniform, not per-instance matrix updates.
  */
 
 import * as THREE from 'three';
-import { BillboardSprite } from './sprites.js';
+import { createUnlitMaterial } from './shaders.js';
 
 // Grid and culling
 const CELL_SIZE = 50;        // 50×50m world-space cells
 const ACTIVE_RADIUS = 5;     // cells around camera
-const CULL_DISTANCE = 200;
-const MAX_VISIBLE = 3200;
 
-// Foliage tier definitions (4x density, no road-relative distances)
+// Foliage tier definitions
 const TIERS = [
     {
         name: 'fern',
@@ -48,6 +46,29 @@ const TIERS = [
     },
 ];
 
+// Total cells in active grid
+const GRID_CELLS = (2 * ACTIVE_RADIUS + 1) ** 2;
+
+// Estimate max instances per texture for capacity allocation.
+// Each tier distributes across its textures, across all active cells.
+function estimateCapacity() {
+    const caps = {};
+    for (const tier of TIERS) {
+        const maxPerCell = tier.countPerCell * tier.clusterSize;
+        const perTexture = Math.ceil(maxPerCell / tier.textures.length);
+        const total = perTexture * GRID_CELLS;
+        for (const file of tier.textures) {
+            caps[file] = (caps[file] || 0) + total;
+        }
+    }
+    return caps;
+}
+
+// Reusable math objects
+const _identityQuat = new THREE.Quaternion();
+const _matrix = new THREE.Matrix4();
+const _camDir = new THREE.Vector3();
+
 // Deterministic seeded random from cell coordinates
 function cellRng(cx, cz) {
     let seed = (cx * 73856093 + cz * 19349669) & 0x7fffffff;
@@ -61,10 +82,12 @@ export class FoliageManager {
     constructor(scene, road) {
         this.scene = scene;
         this.road = road;
-        this._textures = {};
-        this._cells = new Map();      // "cx,cz" -> [sprites]
-        this._allSprites = [];        // flat list for culling
+        this._textures = {};           // filename -> THREE.Texture
+        this._meshes = new Map();      // filename -> { mesh, material }
+        this._cellData = new Map();    // "cx,cz" -> [{ texFile, x, y, z, w, h }]
+        this._dirty = false;
         this._loadTextures();
+        this._createInstancedMeshes();
     }
 
     _loadTextures() {
@@ -80,71 +103,126 @@ export class FoliageManager {
         }
     }
 
+    _createInstancedMeshes() {
+        // Shared unit quad geometry, bottom-anchored
+        const geo = new THREE.PlaneGeometry(1, 1);
+        geo.translate(0, 0.5, 0);
+
+        const capacities = estimateCapacity();
+
+        for (const tier of TIERS) {
+            for (const file of tier.textures) {
+                if (this._meshes.has(file)) continue;
+
+                const tex = this._textures[file];
+                const material = createUnlitMaterial(tex, {
+                    transparent: true,
+                    alphaTest: 0.1,
+                    side: THREE.DoubleSide,
+                    billboard: true,
+                });
+
+                const capacity = capacities[file] || 1000;
+                const mesh = new THREE.InstancedMesh(geo, material, capacity);
+                mesh.count = 0;
+                mesh.frustumCulled = false;
+
+                this.scene.add(mesh);
+                this._meshes.set(file, { mesh, material });
+            }
+        }
+    }
+
     _spawnCell(cx, cz) {
         const key = `${cx},${cz}`;
-        if (this._cells.has(key)) return;
+        if (this._cellData.has(key)) return;
 
-        const sprites = [];
+        const instances = [];
         const rng = cellRng(cx, cz);
         const cellX = cx * CELL_SIZE;
         const cellZ = cz * CELL_SIZE;
 
         for (const tier of TIERS) {
             for (let c = 0; c < tier.countPerCell; c++) {
-                // Base position within the cell
                 const baseX = cellX + rng() * CELL_SIZE;
                 const baseZ = cellZ + rng() * CELL_SIZE;
 
                 for (let ci = 0; ci < tier.clusterSize; ci++) {
-                    // Cluster spread
                     const wx = baseX + (ci > 0 ? (rng() - 0.5) * 6 : 0);
                     const wz = baseZ + (ci > 0 ? (rng() - 0.5) * 6 : 0);
 
-                    // Road avoidance: skip if on road/shoulder/sidewalk
+                    // Road avoidance
                     const info = this.road.getRoadInfoAt({ x: wx, z: wz });
                     if (!info.offRoad) {
-                        // Consume remaining rng calls to keep determinism
                         rng(); rng();
                         continue;
                     }
 
-                    // Size variation +/- 20%
                     const sizeMult = 0.8 + rng() * 0.4;
                     const w = tier.baseWidth * sizeMult;
                     const h = tier.baseHeight * sizeMult;
 
-                    // Pick random texture from tier
                     const texFile = tier.textures[Math.floor(rng() * tier.textures.length)];
-                    const tex = this._textures[texFile];
-                    if (!tex) continue;
+                    if (!this._textures[texFile]) continue;
 
-                    const sprite = new BillboardSprite(tex, w, h);
-                    sprite.setPosition(wx, 0, wz);
-                    this.scene.add(sprite.mesh);
-                    sprites.push(sprite);
-                    this._allSprites.push(sprite);
+                    instances.push({ texFile, x: wx, y: 0, z: wz, w, h });
                 }
             }
         }
 
-        this._cells.set(key, sprites);
+        this._cellData.set(key, instances);
+        this._dirty = true;
     }
 
     _removeCell(key) {
-        const sprites = this._cells.get(key);
-        if (!sprites) return;
+        if (!this._cellData.has(key)) return;
+        this._cellData.delete(key);
+        this._dirty = true;
+    }
 
-        for (const sprite of sprites) {
-            this.scene.remove(sprite.mesh);
-            sprite.dispose();
-            const idx = this._allSprites.indexOf(sprite);
-            if (idx >= 0) this._allSprites.splice(idx, 1);
+    _rebuildInstances() {
+        // Collect all instances grouped by texture
+        const buckets = new Map();
+        for (const file of this._meshes.keys()) {
+            buckets.set(file, []);
         }
-        this._cells.delete(key);
+
+        for (const instances of this._cellData.values()) {
+            for (const inst of instances) {
+                const bucket = buckets.get(inst.texFile);
+                if (bucket) bucket.push(inst);
+            }
+        }
+
+        // Write instance matrices
+        const scale = new THREE.Vector3();
+        for (const [file, data] of this._meshes) {
+            const bucket = buckets.get(file);
+            const count = bucket.length;
+            data.mesh.count = count;
+
+            for (let i = 0; i < count; i++) {
+                const inst = bucket[i];
+                scale.set(inst.w, inst.h, 1);
+                _matrix.compose(
+                    { x: inst.x, y: inst.y, z: inst.z },  // position-like object
+                    _identityQuat,
+                    scale
+                );
+                data.mesh.setMatrixAt(i, _matrix);
+            }
+
+            if (count > 0) {
+                data.mesh.instanceMatrix.needsUpdate = true;
+            }
+        }
+
+        this._dirty = false;
     }
 
     /**
-     * Per-frame update: manage cell lifecycle, distance culling, billboards.
+     * Per-frame update: manage cell lifecycle, rebuild instances if needed,
+     * update billboard uniform.
      */
     update(camera) {
         const camX = camera.position.x;
@@ -162,22 +240,29 @@ export class FoliageManager {
 
         // Spawn new cells
         for (const key of activeCells) {
-            if (!this._cells.has(key)) {
+            if (!this._cellData.has(key)) {
                 const [cx, cz] = key.split(',').map(Number);
                 this._spawnCell(cx, cz);
             }
         }
 
         // Remove cells out of range
-        for (const key of this._cells.keys()) {
+        for (const key of this._cellData.keys()) {
             if (!activeCells.has(key)) {
                 this._removeCell(key);
             }
         }
 
-        // Billboard update
-        for (const sprite of this._allSprites) {
-            sprite.update(camera);
+        // Rebuild instance buffers if cells changed
+        if (this._dirty) {
+            this._rebuildInstances();
+        }
+
+        // Billboard uniform — computed once from camera direction
+        const dir = camera.getWorldDirection(_camDir);
+        const rotY = Math.atan2(dir.x, dir.z) + Math.PI;
+        for (const md of this._meshes.values()) {
+            md.material.uniforms.billboardRotY.value = rotY;
         }
     }
 }

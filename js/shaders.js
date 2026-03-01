@@ -32,9 +32,28 @@ varying vec2 vUv;
 varying float vViewDepth;
 varying vec3 vWorldPos;
 
+#ifdef BILLBOARD_Y
+uniform float billboardRotY;
+#endif
+
 void main() {
     vUv = uv;
-    vec4 worldPos = modelMatrix * vec4(position, 1.0);
+
+    vec3 pos = position;
+
+    #ifdef BILLBOARD_Y
+    // Rotate quad around Y in object space before world transform
+    // PlaneGeometry is in XY plane so position.z ≈ 0
+    float c = cos(billboardRotY), s = sin(billboardRotY);
+    pos = vec3(position.x * c, position.y, position.x * s);
+    #endif
+
+    #ifdef USE_INSTANCING
+    vec4 worldPos = modelMatrix * instanceMatrix * vec4(pos, 1.0);
+    #else
+    vec4 worldPos = modelMatrix * vec4(pos, 1.0);
+    #endif
+
     vWorldPos = worldPos.xyz;
     vec4 mvPosition = viewMatrix * worldPos;
     vViewDepth = -mvPosition.z;
@@ -99,6 +118,7 @@ void main() {
  * @param {number} options.side - THREE.FrontSide / DoubleSide / BackSide
  * @param {number} options.opacity - Overall opacity multiplier
  * @param {boolean} options.depthWrite - Write to depth buffer
+ * @param {boolean} options.billboard - Enable shader-based Y-axis billboard (for InstancedMesh)
  */
 export function createUnlitMaterial(texture, options = {}) {
     const {
@@ -107,22 +127,33 @@ export function createUnlitMaterial(texture, options = {}) {
         side = THREE.FrontSide,
         opacity = 1.0,
         depthWrite = true,
+        billboard = false,
     } = options;
 
+    const uniforms = {
+        albedoMap:   { value: texture },
+        alphaTest:   { value: alphaTest },
+        opacity:     { value: opacity },
+        // Shared — mutating .value on these updates all materials
+        ambientTint:        unlitUniforms.ambientTint,
+        fogColor:           unlitUniforms.fogColor,
+        fogStart:           unlitUniforms.fogStart,
+        fogEnd:             unlitUniforms.fogEnd,
+        headlightPos:       unlitUniforms.headlightPos,
+        headlightDir:       unlitUniforms.headlightDir,
+        headlightIntensity: unlitUniforms.headlightIntensity,
+    };
+
+    const defines = {};
+
+    if (billboard) {
+        defines.BILLBOARD_Y = '';
+        uniforms.billboardRotY = { value: 0.0 };
+    }
+
     return new THREE.ShaderMaterial({
-        uniforms: {
-            albedoMap:   { value: texture },
-            alphaTest:   { value: alphaTest },
-            opacity:     { value: opacity },
-            // Shared — mutating .value on these updates all materials
-            ambientTint:        unlitUniforms.ambientTint,
-            fogColor:           unlitUniforms.fogColor,
-            fogStart:           unlitUniforms.fogStart,
-            fogEnd:             unlitUniforms.fogEnd,
-            headlightPos:       unlitUniforms.headlightPos,
-            headlightDir:       unlitUniforms.headlightDir,
-            headlightIntensity: unlitUniforms.headlightIntensity,
-        },
+        uniforms,
+        defines,
         vertexShader,
         fragmentShader,
         transparent,

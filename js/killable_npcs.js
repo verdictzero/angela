@@ -1,14 +1,14 @@
 /**
- * Killable NPC Manager — Moped Riders
+ * Killable NPC Manager — Moped Riders (InstancedMesh)
  *
  * Spawns moped riders on the road that drive in the same direction
  * as the player at varying slower speeds. NPCs follow the road
- * by advancing along road spine points. Uses BillboardSprite with
- * the unlit shader for ambient tint and fog.
+ * by advancing along road spine points. Uses a single InstancedMesh
+ * with shader-based billboard for all NPCs.
  */
 
 import * as THREE from 'three';
-import { BillboardSprite } from './sprites.js';
+import { createUnlitMaterial } from './shaders.js';
 import { randomRange } from './utils.js';
 
 const HIT_RADIUS = 2.5;             // hit detection radius
@@ -19,9 +19,14 @@ const MOPED_SPEED_MIN = 5;          // m/s (~18 km/h)
 const MOPED_SPEED_MAX = 12;         // m/s (~43 km/h)
 const MOPED_HEIGHT = 2.2;
 const MOPED_WIDTH = MOPED_HEIGHT * 0.4;  // maintain source image aspect ratio (250x625)
-const NPC_CULL_DISTANCE = 200;
 
-// Shared texture — loaded once, reused by all NPCs
+// Reusable math objects
+const _identityQuat = new THREE.Quaternion();
+const _oneScale = new THREE.Vector3(1, 1, 1);
+const _matrix = new THREE.Matrix4();
+const _camDir = new THREE.Vector3();
+
+// Shared texture — loaded once
 let mopedTexture = null;
 
 function getMopedTexture() {
@@ -38,6 +43,22 @@ export class KillableNPCManager {
     constructor(scene) {
         this.scene = scene;
         this.npcs = [];
+
+        // Create InstancedMesh — bottom-anchored quad at moped size
+        const geo = new THREE.PlaneGeometry(MOPED_WIDTH, MOPED_HEIGHT);
+        geo.translate(0, MOPED_HEIGHT / 2, 0);
+
+        this._material = createUnlitMaterial(getMopedTexture(), {
+            transparent: true,
+            alphaTest: 0.1,
+            side: THREE.DoubleSide,
+            billboard: true,
+        });
+
+        this._mesh = new THREE.InstancedMesh(geo, this._material, MAX_NPCS);
+        this._mesh.count = 0;
+        this._mesh.frustumCulled = false;
+        this.scene.add(this._mesh);
     }
 
     /**
@@ -51,26 +72,25 @@ export class KillableNPCManager {
             // Only spawn on road (not sidewalks)
             if (spawn.type !== 'road') continue;
 
-            const tex = getMopedTexture();
-            const sprite = new BillboardSprite(tex, MOPED_WIDTH, MOPED_HEIGHT);
-            sprite.setPosition(spawn.position.x, spawn.position.y, spawn.position.z);
-
             const npc = {
-                sprite,
+                position: new THREE.Vector3(
+                    spawn.position.x,
+                    spawn.position.y,
+                    spawn.position.z
+                ),
                 alive: true,
                 speed: randomRange(MOPED_SPEED_MIN, MOPED_SPEED_MAX),
-                roadIndex: spawn.roadIndex,       // current road spine point index
-                lateralOffset: spawn.lateralOffset || 0, // offset from road center
-                distAccum: 0,                     // distance accumulated toward next point
+                roadIndex: spawn.roadIndex,
+                lateralOffset: spawn.lateralOffset || 0,
+                distAccum: 0,
             };
 
-            this.scene.add(sprite.mesh);
             this.npcs.push(npc);
         }
     }
 
     /**
-     * Update all NPCs: advance along road spine, billboard, despawn.
+     * Update all NPCs: advance along road spine, rebuild instance matrices, billboard.
      * roadPoints is the full road.points array.
      */
     update(dt, camera, vehiclePos, vehicleAngle, roadPoints) {
@@ -109,14 +129,13 @@ export class KillableNPCManager {
             const rx = ptA.right.x + (ptB.right.x - ptA.right.x) * t;
             const rz = ptA.right.z + (ptB.right.z - ptA.right.z) * t;
 
-            const mpos = m.sprite.mesh.position;
-            mpos.x = cx + rx * m.lateralOffset;
-            mpos.y = 0;
-            mpos.z = cz + rz * m.lateralOffset;
+            m.position.x = cx + rx * m.lateralOffset;
+            m.position.y = 0;
+            m.position.z = cz + rz * m.lateralOffset;
 
             // Despawn if too far behind player
-            const dx = vehiclePos.x - mpos.x;
-            const dz = vehiclePos.z - mpos.z;
+            const dx = vehiclePos.x - m.position.x;
+            const dz = vehiclePos.z - m.position.z;
             const fwdX = Math.sin(vehicleAngle);
             const fwdZ = -Math.cos(vehicleAngle);
             const behind = dx * fwdX + dz * fwdZ;
@@ -124,10 +143,23 @@ export class KillableNPCManager {
                 this._removeNPC(i);
                 continue;
             }
-
-            // Billboard toward camera
-            m.sprite.update(camera);
         }
+
+        // Rebuild instance matrices
+        let count = 0;
+        for (const npc of this.npcs) {
+            _matrix.compose(npc.position, _identityQuat, _oneScale);
+            this._mesh.setMatrixAt(count, _matrix);
+            count++;
+        }
+        this._mesh.count = count;
+        if (count > 0) {
+            this._mesh.instanceMatrix.needsUpdate = true;
+        }
+
+        // Billboard uniform
+        const dir = camera.getWorldDirection(_camDir);
+        this._material.uniforms.billboardRotY.value = Math.atan2(dir.x, dir.z) + Math.PI;
     }
 
     /**
@@ -152,14 +184,13 @@ export class KillableNPCManager {
             const m = this.npcs[i];
             if (!m.alive) continue;
 
-            const mpos = m.sprite.mesh.position;
-            const dx = checkPos.x - mpos.x;
-            const dz = checkPos.z - mpos.z;
+            const dx = checkPos.x - m.position.x;
+            const dz = checkPos.z - m.position.z;
             const dist = Math.sqrt(dx * dx + dz * dz);
 
             if (dist < HIT_RADIUS) {
                 hits.push({
-                    position: mpos.clone(),
+                    position: m.position.clone(),
                     variant: 0,
                     velocity: forward.clone().multiplyScalar(vehicleSpeed * 0.5)
                 });
@@ -171,10 +202,6 @@ export class KillableNPCManager {
     }
 
     _removeNPC(index) {
-        const m = this.npcs[index];
-        m.alive = false;
-        this.scene.remove(m.sprite.mesh);
-        m.sprite.dispose();
         this.npcs.splice(index, 1);
     }
 
