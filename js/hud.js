@@ -13,6 +13,8 @@ export class HUD {
         this._comboEl = document.getElementById('hud-combo');
         this._timeEl = document.getElementById('hud-time');
         this._debugEl = document.getElementById('hud-debug');
+        this._debugToggleEl = document.getElementById('hud-debug-toggle');
+        this._debugCollapsed = false;
 
         this._renderer = renderer;
 
@@ -46,6 +48,33 @@ export class HUD {
             ? `${navigator.deviceMemory} GB`
             : 'N/A';
         this._glInfo = this._queryGLInfo();
+
+        // Wire up debug panel toggle
+        if (this._debugToggleEl && this._debugEl) {
+            this._debugToggleEl.addEventListener('click', () => {
+                this._debugCollapsed = !this._debugCollapsed;
+                if (this._debugCollapsed) {
+                    this._debugEl.classList.add('collapsed');
+                    this._debugToggleEl.textContent = 'DEBUG';
+                } else {
+                    this._debugEl.classList.remove('collapsed');
+                    this._debugToggleEl.textContent = '\u2715';
+                }
+                try { sessionStorage.setItem('debugCollapsed', this._debugCollapsed ? '1' : '0'); }
+                catch (_) { /* noop */ }
+            });
+
+            // Restore session state
+            try {
+                if (sessionStorage.getItem('debugCollapsed') === '1') {
+                    this._debugCollapsed = true;
+                    this._debugEl.classList.add('collapsed');
+                    this._debugToggleEl.textContent = 'DEBUG';
+                } else {
+                    this._debugToggleEl.textContent = '\u2715';
+                }
+            } catch (_) { /* noop */ }
+        }
     }
 
     _parseBrowser() {
@@ -193,6 +222,7 @@ export class HUD {
 
     _updateDebug(dt, debugInfo) {
         if (!this._debugEl) return;
+        if (this._debugCollapsed) return;
 
         // FPS rolling average
         this._fpsFrames++;

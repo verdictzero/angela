@@ -210,11 +210,38 @@ body {
     letter-spacing: 0.1em;
 }
 
-/* Debug Panel — upper-left, below time */
-#hud-debug {
+/* Debug Panel Wrapper — upper-left, below time */
+#hud-debug-wrapper {
     position: fixed;
     top: 50px;
     left: 30px;
+}
+
+/* Debug Toggle Button */
+#hud-debug-toggle {
+    display: block;
+    pointer-events: auto;
+    cursor: pointer;
+    font-family: 'Courier New', monospace;
+    font-size: 0.65rem;
+    color: #88aacc;
+    background: rgba(0, 0, 0, 0.45);
+    border: 1px solid rgba(136, 170, 204, 0.3);
+    border-radius: 3px;
+    padding: 2px 8px;
+    letter-spacing: 0.08em;
+    opacity: 0.85;
+    margin-bottom: 4px;
+    transition: background 0.2s, color 0.2s;
+}
+
+#hud-debug-toggle:hover {
+    background: rgba(0, 0, 0, 0.65);
+    color: #aaccee;
+}
+
+/* Debug Panel */
+#hud-debug {
     font-size: 0.72rem;
     color: #88aacc;
     text-shadow: 0 0 3px rgba(80, 130, 180, 0.4);
@@ -225,6 +252,17 @@ body {
     background: rgba(0, 0, 0, 0.35);
     padding: 6px 10px;
     border-radius: 4px;
+    max-height: 500px;
+    overflow: hidden;
+    transition: max-height 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
+}
+
+/* Collapsed state */
+#hud-debug.collapsed {
+    max-height: 0;
+    opacity: 0;
+    padding-top: 0;
+    padding-bottom: 0;
 }
 
 /* Blood Overlay */
@@ -368,12 +406,19 @@ body {
         left: 15px;
     }
 
-    #hud-debug {
-        font-size: 0.55rem;
+    #hud-debug-wrapper {
         top: 38px;
         left: 10px;
+    }
+
+    #hud-debug {
+        font-size: 0.55rem;
         padding: 4px 6px;
         max-height: 50vh;
         overflow-y: auto;
+    }
+
+    #hud-debug-toggle {
+        font-size: 0.55rem;
     }
 }
