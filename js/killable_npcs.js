@@ -19,6 +19,7 @@ const MOPED_SPEED_MIN = 5;          // m/s (~18 km/h)
 const MOPED_SPEED_MAX = 12;         // m/s (~43 km/h)
 const MOPED_HEIGHT = 2.2;
 const MOPED_WIDTH = MOPED_HEIGHT * 0.4;  // maintain source image aspect ratio (250x625)
+const NPC_CULL_DISTANCE = 200;
 
 // Shared texture — loaded once, reused by all NPCs
 let mopedTexture = null;
@@ -72,7 +73,7 @@ export class KillableNPCManager {
      * Update all NPCs: advance along road spine, billboard, despawn.
      * roadPoints is the full road.points array.
      */
-    update(dt, cameraPosition, vehiclePos, vehicleAngle, roadPoints) {
+    update(dt, camera, vehiclePos, vehicleAngle, roadPoints) {
         const pointSpacing = 4; // must match POINT_SPACING in road.js
         const maxIdx = roadPoints.length - 1;
 
@@ -124,8 +125,15 @@ export class KillableNPCManager {
                 continue;
             }
 
-            // Billboard toward camera
-            m.sprite.update(cameraPosition);
+            // Distance culling — hide far-away NPCs but keep them moving
+            const camDx = mpos.x - camera.position.x;
+            const camDz = mpos.z - camera.position.z;
+            if (camDx * camDx + camDz * camDz > NPC_CULL_DISTANCE * NPC_CULL_DISTANCE) {
+                m.sprite.mesh.visible = false;
+            } else {
+                m.sprite.mesh.visible = true;
+                m.sprite.update(camera);
+            }
         }
     }
 

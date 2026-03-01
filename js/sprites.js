@@ -9,6 +9,8 @@ import * as THREE from 'three';
 import { normalizeAngle, createCanvasTexture } from './utils.js';
 import { createUnlitMaterial } from './shaders.js';
 
+const _camDir = new THREE.Vector3();
+
 /**
  * Sprite direction indices:
  * 0 = front (facing camera)
@@ -218,16 +220,16 @@ export class DirectionalSprite {
      * Update billboard rotation and sprite direction.
      * Call every frame.
      */
-    update(cameraPosition) {
+    update(camera) {
+        // Camera-plane Y-axis billboarding: all sprites face the same direction
+        const dir = camera.getWorldDirection(_camDir);
+        this.mesh.rotation.y = Math.atan2(dir.x, dir.z) + Math.PI;
+
+        // Direction selection still uses camera position for which face to show
         const spritePos = this.mesh.position;
-
-        // Y-billboard: face camera on Y axis only
-        const dx = cameraPosition.x - spritePos.x;
-        const dz = cameraPosition.z - spritePos.z;
+        const dx = camera.position.x - spritePos.x;
+        const dz = camera.position.z - spritePos.z;
         const angleToCamera = Math.atan2(dx, dz);
-
-        // Set Y-billboard rotation
-        this.mesh.rotation.y = angleToCamera;
 
         // Determine which sprite direction to show
         const relAngle = normalizeAngle(angleToCamera - this.facingAngle);
@@ -300,10 +302,9 @@ export class BillboardSprite {
         this.mesh = new THREE.Mesh(geo, mat);
     }
 
-    update(cameraPosition) {
-        const dx = cameraPosition.x - this.mesh.position.x;
-        const dz = cameraPosition.z - this.mesh.position.z;
-        this.mesh.rotation.y = Math.atan2(dx, dz);
+    update(camera) {
+        const dir = camera.getWorldDirection(_camDir);
+        this.mesh.rotation.y = Math.atan2(dir.x, dir.z) + Math.PI;
     }
 
     setPosition(x, y, z) {

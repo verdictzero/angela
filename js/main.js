@@ -63,7 +63,7 @@ const killableNPCs = new KillableNPCManager(scene);
 const gore = new GoreSystem(scene);
 const hud = new HUD();
 const dayNight = new DayNightCycle(scene);
-const foliage = new FoliageManager(scene);
+const foliage = new FoliageManager(scene, road);
 
 // Cockpit is child of camera, add camera to scene
 scene.add(camera);
@@ -79,7 +79,6 @@ function spawnNPCsForNewChunks() {
         if (!spawnedChunkIds.has(chunk.id)) {
             const spawnPositions = road._spawnPositionsForChunk(chunk);
             killableNPCs.spawnFromChunk(chunk.id, spawnPositions, road.points);
-            foliage.spawnForChunk(chunk.id, road.points, chunk.startIdx, chunk.endIdx);
             spawnedChunkIds.add(chunk.id);
         }
         if (chunk.id > lastSpawnedChunkId) lastSpawnedChunkId = chunk.id;
@@ -173,16 +172,11 @@ function gameLoop() {
     // Update road (generate ahead, remove behind)
     road.update(vehicle.position);
 
-    // Clean up foliage for removed road chunks
-    for (const removedId of road.removedChunkIds) {
-        foliage.removeChunk(removedId);
-    }
-
     // Spawn NPCs in new chunks
     spawnNPCsForNewChunks();
 
     // Update killable NPCs (pass road points so they follow the road)
-    killableNPCs.update(dt, camera.position, vehicle.position, vehicle.angle, road.points);
+    killableNPCs.update(dt, camera, vehicle.position, vehicle.angle, road.points);
 
     // Check NPC hits
     const hits = killableNPCs.checkHits(vehicle.position, vehicle.angle, vehicle.speed);
@@ -193,10 +187,10 @@ function gameLoop() {
     }
 
     // Update foliage (distance culling + billboards)
-    foliage.update(camera.position);
+    foliage.update(camera);
 
     // Update gore particles
-    gore.update(dt, camera.position);
+    gore.update(dt, camera);
 
     // Update cockpit
     cockpit.update(dt, vehicle);

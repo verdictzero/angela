@@ -8,6 +8,8 @@
 import * as THREE from 'three';
 import { randomRange, createCanvasTexture } from './utils.js';
 
+const _camDir = new THREE.Vector3();
+
 const MAX_PARTICLES = 500;
 const PARTICLES_PER_HIT = 20;
 const PARTICLE_LIFETIME = 2.0;
@@ -179,7 +181,7 @@ export class GoreSystem {
     /**
      * Update all particles and decals.
      */
-    update(dt, cameraPosition) {
+    update(dt, camera) {
         // Update particles
         for (let i = this.particles.length - 1; i >= 0; i--) {
             const p = this.particles[i];
@@ -208,9 +210,10 @@ export class GoreSystem {
                     p.lifetime = p.age + randomRange(0.5, 1.5);
                 }
 
-                // Billboard toward camera
+                // Billboard toward camera plane
                 if (!p.grounded) {
-                    p.mesh.lookAt(cameraPosition);
+                    const dir = camera.getWorldDirection(_camDir);
+                    p.mesh.rotation.y = Math.atan2(dir.x, dir.z) + Math.PI;
                 }
             }
 
