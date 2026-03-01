@@ -84,6 +84,23 @@ const foliage = new FoliageManager(scene, road);
 // Cockpit is child of camera, add camera to scene
 scene.add(camera);
 
+// ── Static Debug Info (collected once) ───────────────────────
+
+const gl = renderer.getContext();
+const debugRendererInfo = gl.getExtension('WEBGL_debug_renderer_info');
+
+const staticDebugInfo = {
+    platform: navigator.platform || 'unknown',
+    cores: navigator.hardwareConcurrency || 'N/A',
+    memory: navigator.deviceMemory ? `${navigator.deviceMemory} GB` : 'N/A',
+    glRenderer: debugRendererInfo
+        ? gl.getParameter(debugRendererInfo.UNMASKED_RENDERER_WEBGL)
+        : gl.getParameter(gl.RENDERER),
+    glVendor: debugRendererInfo
+        ? gl.getParameter(debugRendererInfo.UNMASKED_VENDOR_WEBGL)
+        : gl.getParameter(gl.VENDOR),
+};
+
 // ── NPC Spawning ─────────────────────────────────────────────
 
 let lastSpawnedChunkId = -1;
@@ -101,15 +118,36 @@ function spawnNPCsForNewChunks() {
     }
 }
 
+// ── Overlay Elements ─────────────────────────────────────────
+
+const loadingScreen = document.getElementById('loading-screen');
+const updatingOverlay = document.getElementById('updating-overlay');
+const startScreen = document.getElementById('start-screen');
+
+// ── Loading Screen ───────────────────────────────────────────
+
+function dismissLoadingScreen() {
+    if (!loadingScreen) return;
+    loadingScreen.classList.add('fade-out');
+    loadingScreen.addEventListener('transitionend', () => {
+        loadingScreen.style.display = 'none';
+    }, { once: true });
+}
+
 // ── Start Screen ──────────────────────────────────────────────
 
 let gameStarted = false;
-const startScreen = document.getElementById('start-screen');
 
 function startGame() {
     if (gameStarted) return;
     gameStarted = true;
-    if (startScreen) startScreen.style.display = 'none';
+
+    if (startScreen) {
+        startScreen.classList.add('fade-out');
+        startScreen.addEventListener('transitionend', () => {
+            startScreen.style.display = 'none';
+        }, { once: true });
+    }
 
     try {
         renderer.domElement.requestPointerLock();
@@ -126,13 +164,33 @@ if (startScreen) {
 
 window.addEventListener('keydown', startGame, { once: false });
 
-// ── Resize Handling ───────────────────────────────────────────
+// ── Resize Handling with "Updating UI" Overlay ───────────────
+
+let resizeTimer = null;
 
 window.addEventListener('resize', () => {
+    // Show overlay immediately
+    if (updatingOverlay) updatingOverlay.classList.add('visible');
+
+    // Clear any pending hide
+    if (resizeTimer) clearTimeout(resizeTimer);
+
+    // Perform the actual resize
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
     composer.setSize(window.innerWidth, window.innerHeight);
+
+    // Debounce: wait for resize to settle, then hide overlay
+    resizeTimer = setTimeout(() => {
+        if (updatingOverlay) updatingOverlay.classList.remove('visible');
+        resizeTimer = null;
+    }, 400);
+});
+
+// Also trigger on orientation change for mobile
+window.addEventListener('orientationchange', () => {
+    if (updatingOverlay) updatingOverlay.classList.add('visible');
 });
 
 // ── Game Loop ─────────────────────────────────────────────────
@@ -219,13 +277,21 @@ function gameLoop() {
     unlitUniforms.headlightPos.value.copy(camera.position);
     unlitUniforms.headlightDir.value.copy(vehicle.getForward());
 
-    // Update HUD — include debug info (chunk ID, coordinates, NPC count)
+    // Update HUD — include extended debug info
     const currentChunk = road.getChunkAt(vehicle.position);
     hud.update(dt, vehicle.speedKmh, dayNight.getTimeString(), dayNight.getPhaseName(), {
         chunkId: currentChunk ? currentChunk.id : -1,
         x: Math.round(vehicle.position.x),
         z: Math.round(vehicle.position.z),
         npcCount: killableNPCs.aliveCount,
+        viewportW: window.innerWidth,
+        viewportH: window.innerHeight,
+        dpr: window.devicePixelRatio,
+        drawCalls: renderer.info.render.calls,
+        triangles: renderer.info.render.triangles,
+        geometries: renderer.info.memory.geometries,
+        textures: renderer.info.memory.textures,
+        staticInfo: staticDebugInfo,
     });
 
     // Render
@@ -257,3 +323,10 @@ function updateCamera(dt) {
 
 spawnNPCsForNewChunks();
 gameLoop();
+
+// Dismiss loading screen after first frames have rendered
+requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+        dismissLoadingScreen();
+    });
+});

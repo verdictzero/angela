@@ -6,7 +6,7 @@
 
 body {
     overflow: hidden;
-    background: #1a1a1a;
+    background: #000;
     font-family: 'Courier New', monospace;
     color: #fff;
     -webkit-user-select: none;
@@ -29,6 +29,63 @@ body {
     height: 100% !important;
 }
 
+/* Loading Screen */
+#loading-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 200;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: #000;
+    transition: opacity 0.6s ease-out;
+}
+
+#loading-screen.fade-out {
+    opacity: 0;
+    pointer-events: none;
+}
+
+#loading-text {
+    font-size: 2rem;
+    color: #cc0000;
+    text-shadow: 0 0 15px #ff0000, 0 0 30px #880000;
+    letter-spacing: 0.3em;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+/* Updating UI Overlay */
+#updating-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 150;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: #000;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease-in-out;
+}
+
+#updating-overlay.visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+#updating-text {
+    font-size: 1.5rem;
+    color: #888;
+    text-shadow: 0 0 10px rgba(150, 150, 150, 0.5);
+    letter-spacing: 0.2em;
+}
+
 /* Start Screen */
 #start-screen {
     position: fixed;
@@ -43,6 +100,12 @@ body {
     align-items: center;
     background: rgba(0, 0, 0, 0.85);
     cursor: pointer;
+    transition: opacity 0.5s ease-out;
+}
+
+#start-screen.fade-out {
+    opacity: 0;
+    pointer-events: none;
 }
 
 #start-screen h1 {
@@ -87,7 +150,7 @@ body {
 
 #hud-speed {
     position: fixed;
-    bottom: 30px;
+    top: 20px;
     right: 30px;
     font-size: 3rem;
     font-weight: bold;
@@ -102,7 +165,7 @@ body {
 
 #hud-score {
     position: fixed;
-    top: 20px;
+    top: 80px;
     right: 30px;
     font-size: 1.5rem;
     color: #ff4444;
@@ -111,7 +174,7 @@ body {
 
 #hud-combo {
     position: fixed;
-    top: 60px;
+    top: 115px;
     right: 30px;
     font-size: 1.2rem;
     color: #ff8800;
@@ -135,13 +198,15 @@ body {
 
 #hud-debug {
     position: fixed;
-    bottom: 30px;
+    top: 50px;
     left: 30px;
-    font-size: 0.85rem;
+    font-size: 0.7rem;
     color: #88aacc;
     text-shadow: 0 0 4px rgba(80, 130, 180, 0.5);
-    letter-spacing: 0.05em;
-    opacity: 0.8;
+    letter-spacing: 0.02em;
+    opacity: 0.85;
+    line-height: 1.5;
+    white-space: pre;
 }
 
 /* Blood Overlay */
@@ -259,13 +324,18 @@ body {
 
     #hud-speed {
         font-size: 2rem;
-        bottom: 220px;
+        top: 10px;
         right: 15px;
     }
 
     #hud-score {
         font-size: 1.1rem;
-        top: 10px;
+        top: 55px;
+        right: 15px;
+    }
+
+    #hud-combo {
+        top: 85px;
         right: 15px;
     }
 
@@ -276,8 +346,8 @@ body {
     }
 
     #hud-debug {
-        font-size: 0.7rem;
-        bottom: 220px;
+        font-size: 0.6rem;
+        top: 40px;
         left: 15px;
     }
 }
