@@ -215,12 +215,16 @@ export class DayNightCycle {
 
     _createLensflare(coreTexture, haloTexture) {
         const sizes = [300, 600, 150, 100];
+        const els = [
+            new LensflareElement(coreTexture, sizes[0], 0),
+            new LensflareElement(haloTexture, sizes[1], 0),
+            new LensflareElement(haloTexture, sizes[2], 0.4),
+            new LensflareElement(haloTexture, sizes[3], 0.7),
+        ];
         const flare = new Lensflare();
-        flare.addElement(new LensflareElement(coreTexture, sizes[0], 0));
-        flare.addElement(new LensflareElement(haloTexture, sizes[1], 0));
-        flare.addElement(new LensflareElement(haloTexture, sizes[2], 0.4));
-        flare.addElement(new LensflareElement(haloTexture, sizes[3], 0.7));
+        for (const el of els) flare.addElement(el);
         flare.userData.baseSizes = sizes;
+        flare.userData.elements = els;
         return flare;
     }
 
@@ -380,8 +384,9 @@ export class DayNightCycle {
             // Scale flare with horizon fade
             this._sunFlare.visible = horizonFade > 0.05;
             const sunBases = this._sunFlare.userData.baseSizes;
-            for (let i = 0; i < this._sunFlare.elements.length; i++) {
-                this._sunFlare.elements[i].size = sunBases[i] * horizonFade;
+            const sunEls = this._sunFlare.userData.elements;
+            for (let i = 0; i < sunEls.length; i++) {
+                sunEls[i].size = sunBases[i] * horizonFade;
             }
         } else {
             this._sunMesh.visible = false;
@@ -397,8 +402,9 @@ export class DayNightCycle {
             // Scale flare with horizon fade
             this._moonFlare.visible = horizonFade > 0.05;
             const moonBases = this._moonFlare.userData.baseSizes;
-            for (let i = 0; i < this._moonFlare.elements.length; i++) {
-                this._moonFlare.elements[i].size = moonBases[i] * horizonFade;
+            const moonEls = this._moonFlare.userData.elements;
+            for (let i = 0; i < moonEls.length; i++) {
+                moonEls[i].size = moonBases[i] * horizonFade;
             }
         } else {
             this._moonMesh.visible = false;
