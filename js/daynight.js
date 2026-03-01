@@ -89,10 +89,10 @@ const CLOUD_COLOR = {
 };
 
 const CLOUD_OPACITY = {
-    night: 0.06,
-    dawn:  0.55,
-    day:   0.45,
-    dusk:  0.50,
+    night: 0.08,
+    dawn:  0.65,
+    day:   0.55,
+    dusk:  0.60,
 };
 
 // Sun/moon orbit radius
@@ -100,8 +100,17 @@ const ORBIT_RADIUS = 300;
 
 // Cloud system constants
 const CLOUD_DOME_RADIUS = 350;
-const CLOUD_COUNT = 28;
+const CLOUD_COUNT = 60;
 const CLOUD_WIND_SPEED = 0.012; // radians per second
+
+// Sky dome gradient
+const SKY_DOME_RADIUS = 480;
+const HORIZON_COLOR = {
+    night: new THREE.Color(0x0c1020),
+    dawn:  new THREE.Color(0xeebb88),
+    day:   new THREE.Color(0x99ccdd),
+    dusk:  new THREE.Color(0xdd8855),
+};
 
 // ── Noise helpers (procedural cloud textures) ────────────────
 
@@ -265,6 +274,10 @@ export class DayNightCycle {
         );
         this._moonMesh.add(this._moonFlare);
 
+        // Sky dome gradient (renders behind everything)
+        this._skyDome = this._createSkyDome();
+        this._skyGroup.add(this._skyDome);
+
         // Procedural clouds
         this._cloudGroup = new THREE.Group();
         this._clouds = this._createClouds();
@@ -384,7 +397,7 @@ export class DayNightCycle {
 
     /**
      * Create procedural cloud system using InstancedMesh on a sky dome.
-     * 28 cloud billboards in 2 altitude bands, single draw call.
+     * 60 cloud billboards in 3 altitude bands, single draw call.
      */
     _createClouds() {
         const tex = createCloudTexture(256, 1);
@@ -395,7 +408,7 @@ export class DayNightCycle {
             depthWrite: false,
             side: THREE.DoubleSide,
             fog: false,
-            opacity: 0.45,
+            opacity: 0.55,
             color: 0xeeeeff,
         });
 
@@ -406,19 +419,29 @@ export class DayNightCycle {
         const center = new THREE.Vector3(0, 0, 0);
 
         for (let i = 0; i < CLOUD_COUNT; i++) {
-            // Two altitude bands: high (0-13) and mid (14-27)
-            const band = i < 14 ? 0 : 1;
-            const bandIdx = band === 0 ? i : i - 14;
-            const bandCount = 14;
+            // Three altitude bands: high (0-19), mid (20-39), low/horizon (40-59)
+            let band, bandIdx, bandCount;
+            if (i < 20) {
+                band = 0; bandIdx = i; bandCount = 20;
+            } else if (i < 40) {
+                band = 1; bandIdx = i - 20; bandCount = 20;
+            } else {
+                band = 2; bandIdx = i - 40; bandCount = 20;
+            }
 
             // Distribute around full circle with jitter
             const baseTheta = (bandIdx / bandCount) * Math.PI * 2;
-            const theta = baseTheta + (Math.random() - 0.5) * 0.35;
+            const theta = baseTheta + (Math.random() - 0.5) * 0.4;
 
-            // phi: angle from zenith. Band 0 = higher sky, band 1 = lower
-            const phi = band === 0
-                ? 0.3 + Math.random() * 0.3
-                : 0.65 + Math.random() * 0.4;
+            // phi: angle from zenith. Band 0 = high, band 1 = mid, band 2 = low/horizon
+            let phi;
+            if (band === 0) {
+                phi = 0.25 + Math.random() * 0.3;
+            } else if (band === 1) {
+                phi = 0.55 + Math.random() * 0.35;
+            } else {
+                phi = 0.9 + Math.random() * 0.35;
+            }
 
             const x = CLOUD_DOME_RADIUS * Math.sin(phi) * Math.cos(theta);
             const y = CLOUD_DOME_RADIUS * Math.cos(phi);
@@ -427,9 +450,9 @@ export class DayNightCycle {
             dummy.position.set(x, y, z);
             dummy.lookAt(center);
 
-            // Random cloud dimensions
-            const scaleX = 55 + Math.random() * 75;
-            const scaleY = 22 + Math.random() * 28;
+            // Random cloud dimensions — wider variation for visual variety
+            const scaleX = 45 + Math.random() * 95;
+            const scaleY = 16 + Math.random() * 32;
             dummy.scale.set(scaleX, scaleY, 1);
 
             dummy.updateMatrix();
@@ -438,6 +461,46 @@ export class DayNightCycle {
 
         mesh.instanceMatrix.needsUpdate = true;
         this._cloudMat = mat;
+        return mesh;
+    }
+
+    /**
+     * Create a sky dome sphere with a zenith-to-horizon gradient shader.
+     * Renders behind everything for a smooth atmospheric background.
+     */
+    _createSkyDome() {
+        const geo = new THREE.SphereGeometry(SKY_DOME_RADIUS, 32, 24);
+        const mat = new THREE.ShaderMaterial({
+            uniforms: {
+                zenithColor:  { value: new THREE.Color(0x5599cc) },
+                horizonColor: { value: new THREE.Color(0x99ccdd) },
+            },
+            vertexShader: /* glsl */ `
+                varying float vHeight;
+                void main() {
+                    vHeight = normalize(position).y;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: /* glsl */ `
+                uniform vec3 zenithColor;
+                uniform vec3 horizonColor;
+                varying float vHeight;
+                void main() {
+                    float t = clamp(vHeight, 0.0, 1.0);
+                    t = pow(t, 0.55);
+                    vec3 color = mix(horizonColor, zenithColor, t);
+                    gl_FragColor = vec4(color, 1.0);
+                }
+            `,
+            side: THREE.BackSide,
+            depthWrite: false,
+            fog: false,
+        });
+
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.renderOrder = -1000;
+        this._skyDomeMat = mat;
         return mesh;
     }
 
@@ -503,9 +566,15 @@ export class DayNightCycle {
             AMBIENT_TINT[phase.a], AMBIENT_TINT[phase.b], t
         );
 
-        // Apply to scene — fog matches sky for seamless horizon blend
-        scene.background.copy(this.currentColors.sky);
-        fog.color.copy(this.currentColors.sky);
+        // Sky dome gradient — zenith uses sky color, horizon blends to haze
+        const horizonA = HORIZON_COLOR[phase.a];
+        const horizonB = HORIZON_COLOR[phase.b];
+        this._skyDomeMat.uniforms.zenithColor.value.copy(this.currentColors.sky);
+        this._skyDomeMat.uniforms.horizonColor.value.copy(horizonA).lerp(horizonB, t);
+
+        // Fog matches horizon color for seamless blending with sky gradient
+        fog.color.copy(this._skyDomeMat.uniforms.horizonColor.value);
+        scene.background.copy(fog.color);
 
         // Interpolate and apply intensities
         this.currentIntensity = this._lerpIntensity(phase.a, phase.b, t);
