@@ -240,6 +240,51 @@ body {
     background: rgba(180, 0, 0, 0.7);
 }
 
+/* Debug Stats Panel */
+#debug-stats {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 55;
+    font-family: 'Courier New', monospace;
+    font-size: 0.75rem;
+}
+
+#debug-stats-toggle {
+    display: block;
+    margin: 0 auto;
+    background: rgba(0, 40, 0, 0.6);
+    color: #0f0;
+    border: 1px solid rgba(0, 255, 0, 0.3);
+    font-family: 'Courier New', monospace;
+    font-size: 0.7rem;
+    padding: 2px 10px;
+    cursor: pointer;
+    text-shadow: 0 0 4px #0f0;
+    letter-spacing: 0.1em;
+}
+
+#debug-stats-toggle:hover {
+    background: rgba(0, 60, 0, 0.8);
+    border-color: rgba(0, 255, 0, 0.5);
+}
+
+#debug-stats-panel {
+    background: rgba(0, 20, 0, 0.7);
+    border: 1px solid rgba(0, 255, 0, 0.2);
+    padding: 6px 12px;
+    margin-bottom: 4px;
+    color: #0f0;
+    text-shadow: 0 0 4px rgba(0, 255, 0, 0.5);
+    line-height: 1.5;
+    white-space: nowrap;
+}
+
+#debug-stats-panel.collapsed {
+    display: none;
+}
+
 /* Responsive adjustments */
 @media (max-width: 600px) {
     #start-screen h1 {

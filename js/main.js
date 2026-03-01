@@ -14,6 +14,7 @@ import { MonsterManager } from './monsters.js';
 import { GoreSystem } from './gore.js';
 import { HUD } from './hud.js';
 import { DayNightCycle } from './daynight.js';
+import { DebugStats } from './debugStats.js';
 
 // ── Scene Setup ──────────────────────────────────────────────
 
@@ -61,6 +62,7 @@ const monsters = new MonsterManager(scene);
 const gore = new GoreSystem(scene);
 const hud = new HUD();
 const dayNight = new DayNightCycle(scene);
+const debugStats = new DebugStats();
 
 // Cockpit is child of camera, add camera to scene
 scene.add(camera);
@@ -141,6 +143,7 @@ function gameLoop() {
     if (!gameStarted) {
         updateCamera(dt);
         renderer.render(scene, camera);
+        debugStats.update(dt, renderer);
         return;
     }
 
@@ -184,6 +187,9 @@ function gameLoop() {
 
     // Render
     renderer.render(scene, camera);
+
+    // Debug stats — MUST be after render so renderer.info has current frame data
+    debugStats.update(dt, renderer);
 }
 
 function updateCamera(dt) {
