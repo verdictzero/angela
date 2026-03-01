@@ -151,12 +151,8 @@ function onResize() {
         return;
     }
 
-    // Snap overlay visible instantly (no transition-in)
-    updatingOverlay.style.transition = 'none';
-    updatingOverlay.classList.remove('hidden');
-    // Force reflow so the snap takes effect before re-enabling transition
-    void updatingOverlay.offsetWidth;
-    updatingOverlay.style.transition = '';
+    // Fade in the overlay (CSS transition handles animation)
+    updatingOverlay.classList.add('visible');
 
     // Clear previous debounce timer
     if (resizeTimer) clearTimeout(resizeTimer);
@@ -165,7 +161,7 @@ function onResize() {
     resizeTimer = setTimeout(() => {
         doResize();
         requestAnimationFrame(() => {
-            updatingOverlay.classList.add('hidden');
+            updatingOverlay.classList.remove('visible');
         });
     }, 400);
 }
@@ -176,6 +172,8 @@ window.addEventListener('orientationchange', onResize);
 // ── Game Loop ─────────────────────────────────────────────────
 
 let prevTime = performance.now();
+let sceneStatsCache = { objects: 0, materials: 0, lights: 0 };
+let sceneStatsFrame = 0;
 
 function gameLoop() {
     requestAnimationFrame(gameLoop);
@@ -257,13 +255,45 @@ function gameLoop() {
     unlitUniforms.headlightPos.value.copy(camera.position);
     unlitUniforms.headlightDir.value.copy(vehicle.getForward());
 
-    // Update HUD — include debug info (chunk ID, coordinates, NPC count)
+    // Scene stats (computed every 30 frames to avoid traversal overhead)
+    sceneStatsFrame++;
+    if (sceneStatsFrame % 30 === 0) {
+        let objCount = 0, lightCount = 0;
+        const matSet = new Set();
+        scene.traverse((obj) => {
+            objCount++;
+            if (obj.isMesh && obj.material) {
+                if (Array.isArray(obj.material)) {
+                    obj.material.forEach(m => matSet.add(m));
+                } else {
+                    matSet.add(obj.material);
+                }
+            }
+            if (obj.isLight) lightCount++;
+        });
+        sceneStatsCache = { objects: objCount, materials: matSet.size, lights: lightCount };
+    }
+
+    // Update HUD — include extended debug info
     const currentChunk = road.getChunkAt(vehicle.position);
     hud.update(dt, vehicle.speedKmh, dayNight.getTimeString(), dayNight.getPhaseName(), {
         chunkId: currentChunk ? currentChunk.id : -1,
         x: Math.round(vehicle.position.x),
         z: Math.round(vehicle.position.z),
         npcCount: killableNPCs.aliveCount,
+        sceneObjects: sceneStatsCache.objects,
+        sceneMaterials: sceneStatsCache.materials,
+        sceneLights: sceneStatsCache.lights,
+        bloomStrength: bloomPass.strength,
+        bloomRadius: bloomPass.radius,
+        bloomThreshold: bloomPass.threshold,
+        toneMapping: 'ACES Filmic',
+        toneMappingExposure: renderer.toneMappingExposure,
+        colorSpace: renderer.outputColorSpace,
+        pixelRatioCapped: Math.min(window.devicePixelRatio, 2),
+        pixelRatioNative: window.devicePixelRatio,
+        canvasWidth: renderer.domElement.width,
+        canvasHeight: renderer.domElement.height,
     });
 
     // Render
@@ -297,15 +327,62 @@ spawnNPCsForNewChunks();
 gameLoop();
 
 // ── Loading Screen Dismissal ─────────────────────────────────
-// Wait for the first frame to render, then fade out the loading screen.
+// Robust readiness gate: waits for minimum display time, rendered frame,
+// and HUD DOM layout before fading out.
 const loadingScreen = document.getElementById('loading-screen');
-if (loadingScreen) {
-    requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-            loadingScreen.classList.add('fade-out');
-            loadingScreen.addEventListener('transitionend', () => {
-                loadingScreen.style.display = 'none';
-            }, { once: true });
-        });
-    });
+const loadingStatus = document.getElementById('loading-status');
+const MINIMUM_LOADING_MS = 1500;
+const MAX_LOADING_MS = 8000;
+const loadStartTime = performance.now();
+let loadingDismissed = false;
+
+function checkReadyToDismiss() {
+    if (loadingDismissed) return;
+
+    const elapsed = performance.now() - loadStartTime;
+
+    // Safety fallback — dismiss after 8s no matter what
+    if (elapsed >= MAX_LOADING_MS) {
+        dismissLoading();
+        return;
+    }
+
+    // Condition 1: minimum display time
+    if (elapsed < MINIMUM_LOADING_MS) {
+        if (loadingStatus) loadingStatus.textContent = 'Preparing scene...';
+        requestAnimationFrame(checkReadyToDismiss);
+        return;
+    }
+
+    // Condition 2: at least one frame rendered
+    if (renderer.info.render.frame < 1) {
+        if (loadingStatus) loadingStatus.textContent = 'Rendering first frame...';
+        requestAnimationFrame(checkReadyToDismiss);
+        return;
+    }
+
+    // Condition 3: HUD elements have laid out
+    const speedEl = document.getElementById('hud-speed');
+    const debugEl = document.getElementById('hud-debug');
+    if (!speedEl || speedEl.offsetHeight === 0 || !debugEl) {
+        if (loadingStatus) loadingStatus.textContent = 'Laying out UI...';
+        requestAnimationFrame(checkReadyToDismiss);
+        return;
+    }
+
+    // All conditions met
+    dismissLoading();
 }
+
+function dismissLoading() {
+    if (loadingDismissed) return;
+    loadingDismissed = true;
+    if (loadingScreen) {
+        loadingScreen.classList.add('fade-out');
+        loadingScreen.addEventListener('transitionend', () => {
+            loadingScreen.style.display = 'none';
+        }, { once: true });
+    }
+}
+
+requestAnimationFrame(checkReadyToDismiss);
