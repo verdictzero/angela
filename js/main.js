@@ -77,7 +77,7 @@ const vehicle = new Vehicle();
 const cockpit = new Cockpit(camera);
 const killableNPCs = new KillableNPCManager(scene);
 const gore = new GoreSystem(scene);
-const hud = new HUD();
+const hud = new HUD(renderer);
 const dayNight = new DayNightCycle(scene);
 const foliage = new FoliageManager(scene, road);
 
@@ -109,7 +109,14 @@ const startScreen = document.getElementById('start-screen');
 function startGame() {
     if (gameStarted) return;
     gameStarted = true;
-    if (startScreen) startScreen.style.display = 'none';
+
+    // Fade out start screen instead of instant hide
+    if (startScreen) {
+        startScreen.classList.add('fade-out');
+        startScreen.addEventListener('transitionend', () => {
+            startScreen.style.display = 'none';
+        }, { once: true });
+    }
 
     try {
         renderer.domElement.requestPointerLock();
@@ -126,14 +133,45 @@ if (startScreen) {
 
 window.addEventListener('keydown', startGame, { once: false });
 
-// ── Resize Handling ───────────────────────────────────────────
+// ── Resize Handling (with "Updating UI" overlay) ─────────────
 
-window.addEventListener('resize', () => {
+const updatingOverlay = document.getElementById('updating-ui-overlay');
+let resizeTimer = null;
+
+function doResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
     composer.setSize(window.innerWidth, window.innerHeight);
-});
+}
+
+function onResize() {
+    if (!updatingOverlay) {
+        doResize();
+        return;
+    }
+
+    // Snap overlay visible instantly (no transition-in)
+    updatingOverlay.style.transition = 'none';
+    updatingOverlay.classList.remove('hidden');
+    // Force reflow so the snap takes effect before re-enabling transition
+    void updatingOverlay.offsetWidth;
+    updatingOverlay.style.transition = '';
+
+    // Clear previous debounce timer
+    if (resizeTimer) clearTimeout(resizeTimer);
+
+    // Wait for resize events to settle, then resize and fade out
+    resizeTimer = setTimeout(() => {
+        doResize();
+        requestAnimationFrame(() => {
+            updatingOverlay.classList.add('hidden');
+        });
+    }, 400);
+}
+
+window.addEventListener('resize', onResize);
+window.addEventListener('orientationchange', onResize);
 
 // ── Game Loop ─────────────────────────────────────────────────
 
@@ -257,3 +295,17 @@ function updateCamera(dt) {
 
 spawnNPCsForNewChunks();
 gameLoop();
+
+// ── Loading Screen Dismissal ─────────────────────────────────
+// Wait for the first frame to render, then fade out the loading screen.
+const loadingScreen = document.getElementById('loading-screen');
+if (loadingScreen) {
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            loadingScreen.classList.add('fade-out');
+            loadingScreen.addEventListener('transitionend', () => {
+                loadingScreen.style.display = 'none';
+            }, { once: true });
+        });
+    });
+}
