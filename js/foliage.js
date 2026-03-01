@@ -175,20 +175,9 @@ export class FoliageManager {
             }
         }
 
-        // Distance culling + billboard update
-        let visibleCount = 0;
+        // Billboard update
         for (const sprite of this._allSprites) {
-            const dx = sprite.mesh.position.x - camX;
-            const dz = sprite.mesh.position.z - camZ;
-            const distSq = dx * dx + dz * dz;
-
-            if (distSq > CULL_DISTANCE * CULL_DISTANCE || visibleCount >= MAX_VISIBLE) {
-                sprite.mesh.visible = false;
-            } else {
-                sprite.mesh.visible = true;
-                sprite.update(camera);
-                visibleCount++;
-            }
+            sprite.update(camera);
         }
     }
 }
