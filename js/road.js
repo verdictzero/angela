@@ -144,6 +144,7 @@ export class RoadManager {
         sidewalkTex.wrapS = THREE.RepeatWrapping;
         sidewalkTex.wrapT = THREE.RepeatWrapping;
         sidewalkTex.repeat.set(2, 2);
+        sidewalkTex.offset.set(0.5, 0);
         sidewalkTex.colorSpace = THREE.SRGBColorSpace;
         sidewalkTex.magFilter = THREE.NearestFilter;
         sidewalkTex.minFilter = THREE.NearestFilter;

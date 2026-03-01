@@ -159,7 +159,7 @@ export class KillableNPCManager {
 
         // Billboard uniform
         const dir = camera.getWorldDirection(_camDir);
-        this._material.uniforms.billboardRotY.value = Math.atan2(dir.x, dir.z) + Math.PI;
+        this._material.uniforms.billboardRotY.value = Math.atan2(dir.x, -dir.z);
     }
 
     /**
