@@ -125,15 +125,8 @@ export class KillableNPCManager {
                 continue;
             }
 
-            // Distance culling — hide far-away NPCs but keep them moving
-            const camDx = mpos.x - camera.position.x;
-            const camDz = mpos.z - camera.position.z;
-            if (camDx * camDx + camDz * camDz > NPC_CULL_DISTANCE * NPC_CULL_DISTANCE) {
-                m.sprite.mesh.visible = false;
-            } else {
-                m.sprite.mesh.visible = true;
-                m.sprite.update(camera);
-            }
+            // Billboard toward camera
+            m.sprite.update(camera);
         }
     }
 
