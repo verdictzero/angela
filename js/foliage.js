@@ -203,7 +203,7 @@ export class FoliageManager {
 
             for (let i = 0; i < count; i++) {
                 const inst = bucket[i];
-                scale.set(inst.w, inst.h, 1);
+                scale.set(inst.w, inst.h, inst.w);
                 _matrix.compose(
                     { x: inst.x, y: inst.y, z: inst.z },  // position-like object
                     _identityQuat,

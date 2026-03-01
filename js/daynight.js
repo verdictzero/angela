@@ -57,10 +57,10 @@ const COLORS = {
 };
 
 const INTENSITY = {
-    night: { ambient: 0.3, sun: 0.15, hemi: 0.2, headlight: 50, fogNear: 10, fogFar: 80 },
-    dawn:  { ambient: 0.8, sun: 0.7,  hemi: 0.5, headlight: 15, fogNear: 20, fogFar: 120 },
-    day:   { ambient: 1.5, sun: 1.4,  hemi: 0.9, headlight: 5,  fogNear: 30, fogFar: 150 },
-    dusk:  { ambient: 0.6, sun: 0.5,  hemi: 0.4, headlight: 25, fogNear: 15, fogFar: 100 },
+    night: { ambient: 0.3, sun: 0.15, hemi: 0.2, headlight: 50, fogNear: 5,  fogFar: 50 },
+    dawn:  { ambient: 0.8, sun: 0.7,  hemi: 0.5, headlight: 15, fogNear: 10, fogFar: 80 },
+    day:   { ambient: 1.5, sun: 1.4,  hemi: 0.9, headlight: 5,  fogNear: 20, fogFar: 100 },
+    dusk:  { ambient: 0.6, sun: 0.5,  hemi: 0.4, headlight: 25, fogNear: 8,  fogFar: 65 },
 };
 
 // Fullscreen color tint per phase — [r, g, b, opacity]
