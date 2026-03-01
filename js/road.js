@@ -43,6 +43,7 @@ export class RoadManager {
         this.targetCurvature = 0;
         this.totalDistance = 0;
         this._nextChunkId = 0;
+        this._lastRemovedChunks = [];
 
         // Generate textures
         this._textures = this._generateTextures();
@@ -167,35 +168,13 @@ export class RoadManager {
             }
         }, 2, 2);
 
-        // Grass ground — rich green with variation
-        const grass = this._makeTexture(256, 256, (ctx, w, h) => {
-            // Base gradient
-            ctx.fillStyle = '#2a4a1a';
-            ctx.fillRect(0, 0, w, h);
-            // Blade-like noise
-            for (let i = 0; i < 10000; i++) {
-                const x = Math.random() * w, y = Math.random() * h;
-                const r = 20 + Math.random() * 35;
-                const g = r + 20 + Math.random() * 30;
-                const b = 8 + Math.random() * 15;
-                ctx.fillStyle = `rgb(${r},${g},${b})`;
-                ctx.fillRect(x, y, 1 + Math.random(), 1 + Math.random() * 3);
-            }
-            // Dark soil patches
-            for (let i = 0; i < 10; i++) {
-                ctx.fillStyle = `rgba(18,28,10,${0.12 + Math.random() * 0.15})`;
-                ctx.beginPath();
-                ctx.arc(Math.random() * w, Math.random() * h, 8 + Math.random() * 18, 0, Math.PI * 2);
-                ctx.fill();
-            }
-            // Light patches (sun spots)
-            for (let i = 0; i < 5; i++) {
-                ctx.fillStyle = `rgba(50,80,30,${0.1 + Math.random() * 0.1})`;
-                ctx.beginPath();
-                ctx.arc(Math.random() * w, Math.random() * h, 12 + Math.random() * 20, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        }, 120, 120);
+        // Grass ground — loaded from texture file
+        const grassTex = new THREE.TextureLoader().load('assets/terrain/terrain_new_meadow_grass_checkered_v2.png');
+        grassTex.wrapS = THREE.RepeatWrapping;
+        grassTex.wrapT = THREE.RepeatWrapping;
+        grassTex.repeat.set(120, 120);
+        grassTex.colorSpace = THREE.SRGBColorSpace;
+        const grass = grassTex;
 
         return { road, shoulder, sidewalk, grass };
     }
@@ -542,10 +521,12 @@ export class RoadManager {
 
         this._buildAllNeededChunks(playerPos);
 
+        this._lastRemovedChunks = [];
         const playerIdx = this._findClosestPointIndex(playerPos);
         const removeBeforeIdx = playerIdx - Math.ceil(REMOVE_BEHIND / POINT_SPACING);
         while (this.chunks.length > 0 && this.chunks[0].endIdx < removeBeforeIdx) {
             const old = this.chunks.shift();
+            this._lastRemovedChunks.push(old.id);
             this.scene.remove(old.group);
             old.group.traverse((child) => {
                 if (child.geometry) child.geometry.dispose();
@@ -555,5 +536,9 @@ export class RoadManager {
 
     get chunkCount() {
         return this.chunks.length;
+    }
+
+    get removedChunkIds() {
+        return this._lastRemovedChunks;
     }
 }

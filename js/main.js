@@ -14,6 +14,7 @@ import { KillableNPCManager } from './killable_npcs.js';
 import { GoreSystem } from './gore.js';
 import { HUD } from './hud.js';
 import { DayNightCycle } from './daynight.js';
+import { FoliageManager } from './foliage.js';
 import { unlitUniforms } from './shaders.js';
 
 // ── Scene Setup ──────────────────────────────────────────────
@@ -62,6 +63,7 @@ const killableNPCs = new KillableNPCManager(scene);
 const gore = new GoreSystem(scene);
 const hud = new HUD();
 const dayNight = new DayNightCycle(scene);
+const foliage = new FoliageManager(scene);
 
 // Cockpit is child of camera, add camera to scene
 scene.add(camera);
@@ -77,6 +79,7 @@ function spawnNPCsForNewChunks() {
         if (!spawnedChunkIds.has(chunk.id)) {
             const spawnPositions = road._spawnPositionsForChunk(chunk);
             killableNPCs.spawnFromChunk(chunk.id, spawnPositions, road.points);
+            foliage.spawnForChunk(chunk.id, road.points, chunk.startIdx, chunk.endIdx);
             spawnedChunkIds.add(chunk.id);
         }
         if (chunk.id > lastSpawnedChunkId) lastSpawnedChunkId = chunk.id;
@@ -170,6 +173,11 @@ function gameLoop() {
     // Update road (generate ahead, remove behind)
     road.update(vehicle.position);
 
+    // Clean up foliage for removed road chunks
+    for (const removedId of road.removedChunkIds) {
+        foliage.removeChunk(removedId);
+    }
+
     // Spawn NPCs in new chunks
     spawnNPCsForNewChunks();
 
@@ -183,6 +191,9 @@ function gameLoop() {
         vehicle.applyImpact(0.15);
         hud.addKill();
     }
+
+    // Update foliage (distance culling + billboards)
+    foliage.update(camera.position);
 
     // Update gore particles
     gore.update(dt, camera.position);

@@ -3,7 +3,7 @@
  *
  * Smoothly transitions through dawn → day → dusk → night.
  * Controls sky color, fog, ambient/directional lighting,
- * headlight intensity, and stars.
+ * headlight intensity, stars, and visible sun/moon.
  */
 
 import * as THREE from 'three';
@@ -13,11 +13,12 @@ import { lerp, clamp, smoothstep } from './utils.js';
 const CYCLE_DURATION = 300; // 5 minutes
 
 // Time phases (0 to 1)
-const NIGHT_END = 0.20;
-const DAWN_END = 0.30;
-const DAY_END = 0.70;
-const DUSK_END = 0.80;
-// NIGHT again from 0.80 to 1.0 (and 0.0 to 0.20)
+// Quick dawn/dusk (~15s each), long day/night (~135s each)
+const NIGHT_END = 0.225;
+const DAWN_END  = 0.275;
+const DAY_END   = 0.725;
+const DUSK_END  = 0.775;
+// NIGHT again from 0.775 to 1.0 (and 0.0 to 0.225)
 
 // Color presets
 const COLORS = {
@@ -71,8 +72,6 @@ const TINT = {
 };
 
 // Ambient tint for unlit shader — multiplied with base textures.
-// At noon ≈ white (full texture color), at night ≈ dark blue.
-// Matches the galvarius pattern: base_color * ambient_tint → fog blend.
 const AMBIENT_TINT = {
     night: new THREE.Color(0.08, 0.08, 0.15),
     dawn:  new THREE.Color(1.0, 0.85, 0.6),
@@ -80,15 +79,31 @@ const AMBIENT_TINT = {
     dusk:  new THREE.Color(0.9, 0.6, 0.4),
 };
 
+// Sun/moon orbit radius
+const ORBIT_RADIUS = 300;
+
 export class DayNightCycle {
     constructor(scene) {
         this.scene = scene;
         this.time = 0.35; // Start in early daytime
         this.speed = 1.0 / CYCLE_DURATION;
 
+        // Sky group holds stars, sun, and moon — moved together in main.js
+        this._skyGroup = new THREE.Group();
+
         // Stars
         this._stars = this._createStars();
-        this.scene.add(this._stars);
+        this._skyGroup.add(this._stars);
+
+        // Sun mesh
+        this._sunMesh = this._createSunMesh();
+        this._skyGroup.add(this._sunMesh);
+
+        // Moon mesh
+        this._moonMesh = this._createMoonMesh();
+        this._skyGroup.add(this._moonMesh);
+
+        this.scene.add(this._skyGroup);
 
         // Sun direction helper (for directional light positioning)
         this._sunAngle = 0;
@@ -138,35 +153,53 @@ export class DayNightCycle {
         return new THREE.Points(geo, mat);
     }
 
+    _createSunMesh() {
+        const geo = new THREE.SphereGeometry(8, 16, 16);
+        const mat = new THREE.MeshBasicMaterial({
+            color: 0xffdd44,
+            fog: false,
+            transparent: true,
+            opacity: 1.0,
+        });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.visible = false;
+        return mesh;
+    }
+
+    _createMoonMesh() {
+        const geo = new THREE.SphereGeometry(5, 16, 16);
+        const mat = new THREE.MeshBasicMaterial({
+            color: 0xccccdd,
+            fog: false,
+            transparent: true,
+            opacity: 0.85,
+        });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.visible = false;
+        return mesh;
+    }
+
     /**
      * Get the interpolation factor between two phases.
      */
     _getPhaseBlend(time) {
-        // Returns { phaseA, phaseB, t } for smooth blending
         if (time < NIGHT_END) {
-            // Night
             return { a: 'night', b: 'night', t: 0 };
         } else if (time < DAWN_END) {
-            // Night → Dawn
             const t = smoothstep(NIGHT_END, DAWN_END, time);
             return { a: 'night', b: 'dawn', t };
         } else if (time < (DAWN_END + DAY_END) / 2) {
-            // Dawn → Day
             const t = smoothstep(DAWN_END, (DAWN_END + DAY_END) / 2, time);
             return { a: 'dawn', b: 'day', t };
         } else if (time < DAY_END) {
-            // Day
             return { a: 'day', b: 'day', t: 0 };
         } else if (time < DUSK_END) {
-            // Day → Dusk
             const t = smoothstep(DAY_END, DUSK_END, time);
             return { a: 'day', b: 'dusk', t };
         } else if (time < (DUSK_END + 1.0) / 2) {
-            // Dusk → Night
             const t = smoothstep(DUSK_END, (DUSK_END + 1.0) / 2, time);
             return { a: 'dusk', b: 'night', t };
         } else {
-            // Night
             return { a: 'night', b: 'night', t: 0 };
         }
     }
@@ -208,9 +241,9 @@ export class DayNightCycle {
             AMBIENT_TINT[phase.a], AMBIENT_TINT[phase.b], t
         );
 
-        // Apply to scene
+        // Apply to scene — fog matches sky for seamless horizon blend
         scene.background.copy(this.currentColors.sky);
-        fog.color.copy(this.currentColors.fog);
+        fog.color.copy(this.currentColors.sky);
 
         // Interpolate and apply intensities
         this.currentIntensity = this._lerpIntensity(phase.a, phase.b, t);
@@ -259,16 +292,70 @@ export class DayNightCycle {
         this._tintOverlay.style.background =
             `rgba(${Math.round(tr)},${Math.round(tg)},${Math.round(tb)},${ta.toFixed(3)})`;
 
-        // Stars visibility
+        // Stars visibility — only after sunset, fade out during dawn
+        const starVis = this._getStarVisibility();
+        this._stars.material.opacity = starVis;
+        this._stars.visible = starVis > 0.01;
+
+        // Sun and moon visual meshes
+        this._updateSunMoon();
+
+        // Nightness for isNight flag (headlights etc)
         const nightness = this._getNightness();
-        this._stars.material.opacity = nightness;
-        this._stars.visible = nightness > 0.01;
-
-        // Update star dome position to follow camera (done in main.js via getStarDome)
-
         this.isNight = nightness > 0.5;
 
         return this.currentIntensity;
+    }
+
+    /**
+     * Update sun and moon mesh positions and visibility.
+     */
+    _updateSunMoon() {
+        // Sun orbits based on cycle time — peaks at midday (time=0.5)
+        // Map time so sun is at zenith around time=0.5
+        const sunOrbitAngle = (this.time - 0.25) * Math.PI * 2;
+        const sunX = Math.cos(sunOrbitAngle) * ORBIT_RADIUS;
+        const sunY = Math.sin(sunOrbitAngle) * ORBIT_RADIUS;
+        const sunZ = Math.sin(sunOrbitAngle * 0.3) * ORBIT_RADIUS * 0.3;
+        this._sunMesh.position.set(sunX, sunY, sunZ);
+
+        // Moon is opposite the sun (180 degrees offset)
+        this._moonMesh.position.set(-sunX, -sunY, -sunZ);
+
+        // Sun visibility and color
+        if (sunY > -10) {
+            this._sunMesh.visible = true;
+            // Fade near horizon
+            const horizonFade = clamp((sunY + 10) / 40, 0, 1);
+            this._sunMesh.material.opacity = horizonFade;
+            // Shift to orange near horizon
+            const horizonT = 1 - clamp(sunY / ORBIT_RADIUS, 0, 1);
+            const sunColor = new THREE.Color(0xffdd44).lerp(new THREE.Color(0xff6622), horizonT * 0.7);
+            this._sunMesh.material.color.copy(sunColor);
+        } else {
+            this._sunMesh.visible = false;
+        }
+
+        // Moon visibility
+        const moonY = -sunY;
+        if (moonY > -10) {
+            this._moonMesh.visible = true;
+            const horizonFade = clamp((moonY + 10) / 40, 0, 1);
+            this._moonMesh.material.opacity = 0.85 * horizonFade;
+        } else {
+            this._moonMesh.visible = false;
+        }
+    }
+
+    /**
+     * Star visibility: 0 during day and dusk, fades in after DUSK_END, fades out during dawn.
+     */
+    _getStarVisibility() {
+        if (this.time < NIGHT_END) return 1;
+        if (this.time < DAWN_END) return 1 - smoothstep(NIGHT_END, DAWN_END, this.time);
+        if (this.time < DUSK_END) return 0;
+        // Fade in after dusk ends
+        return smoothstep(DUSK_END, DUSK_END + 0.05, this.time);
     }
 
     /**
@@ -283,10 +370,10 @@ export class DayNightCycle {
     }
 
     /**
-     * Get the star dome mesh (for repositioning).
+     * Get the sky group (stars + sun + moon) for repositioning.
      */
     getStarDome() {
-        return this._stars;
+        return this._skyGroup;
     }
 
     /**

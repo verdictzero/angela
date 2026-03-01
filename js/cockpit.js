@@ -39,8 +39,10 @@ export class Cockpit {
         camera.add(this.group);
 
         this.dashMesh = null;
+        this.underDashMesh = null;
         this.wheelMesh = null;
         this.dashAspect = 2.4;
+        this.underDashAspect = 2.0;
         this.wheelAspect = 1.0;
 
         this.swayX = 0;
@@ -79,6 +81,26 @@ export class Cockpit {
             this.dashMesh.renderOrder = 100;
             this.dashMesh.position.z = DASH_Z;
             this.group.add(this.dashMesh);
+            this._updateLayout();
+        });
+
+        loader.load('assets/under_dash.png', (tex) => {
+            tex.colorSpace = THREE.SRGBColorSpace;
+            tex.magFilter = THREE.NearestFilter;
+            tex.minFilter = THREE.NearestFilter;
+            this.underDashAspect = tex.image.width / tex.image.height;
+
+            const mat = createUnlitMaterial(tex, {
+                transparent: true,
+                alphaTest: 0.01,
+                depthWrite: false,
+            });
+            mat.depthTest = false;
+
+            this.underDashMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
+            this.underDashMesh.renderOrder = 99;
+            this.underDashMesh.position.z = DASH_Z;
+            this.group.add(this.underDashMesh);
             this._updateLayout();
         });
 
@@ -144,6 +166,19 @@ export class Cockpit {
         uv.setY(1, 1);
         uv.needsUpdate = true;
 
+        // ── Under-dash — top edge at 75% down dashboard, extends below viewport
+        if (this.underDashMesh) {
+            const topY = this.dashMesh.position.y + dashH / 2 - dashH * 0.75;
+            const udW = dashW;
+            const udH = udW / this.underDashAspect;
+            // If the image isn't tall enough to extend well below viewport, scale it up
+            const minUdH = visH_dash;
+            const finalUdH = Math.max(udH, minUdH);
+            const finalUdW = finalUdH * this.underDashAspect;
+            this.underDashMesh.scale.set(Math.max(udW, finalUdW), finalUdH, 1);
+            this.underDashMesh.position.y = topY - finalUdH / 2;
+        }
+
         // ── Steering wheel — center on red + position
         if (this.wheelMesh) {
             const pos = this._dashImageToCamera(RED_CROSS_X, RED_CROSS_Y, WHEEL_Z);
@@ -190,6 +225,10 @@ export class Cockpit {
 
         if (this.dashMesh) {
             this.dashMesh.position.x = this._dashBaseX + sway;
+        }
+
+        if (this.underDashMesh) {
+            this.underDashMesh.position.x = this._dashBaseX + sway;
         }
 
         if (this.wheelMesh) {
