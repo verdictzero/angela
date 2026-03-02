@@ -14,6 +14,9 @@ export class HUD {
         this._timeEl = document.getElementById('hud-time');
         this._debugEl = document.getElementById('hud-debug');
         this._debugToggleEl = document.getElementById('hud-debug-toggle');
+        this._healthBarEl = document.getElementById('hud-health-bar');
+        this._healthFillEl = document.getElementById('hud-health-fill');
+        this._fluidEl = document.getElementById('hud-fluid');
         this._debugCollapsed = false;
 
         this._renderer = renderer;
@@ -192,7 +195,7 @@ export class HUD {
         }
     }
 
-    update(dt, speedKmh, timeStr, phaseName, debugInfo) {
+    update(dt, speedKmh, timeStr, phaseName, debugInfo, health, washerFluid) {
         if (this._speedEl) {
             this._speedEl.innerHTML = `${speedKmh} <span>km/h</span>`;
         }
@@ -203,6 +206,16 @@ export class HUD {
 
         if (this._timeEl && timeStr) {
             this._timeEl.textContent = `${timeStr} ${phaseName}`;
+        }
+
+        // Health bar
+        if (this._healthFillEl && health !== undefined) {
+            this._healthFillEl.style.width = `${health}%`;
+        }
+
+        // Washer fluid indicator
+        if (this._fluidEl && washerFluid !== undefined) {
+            this._fluidEl.textContent = `FLUID: ${Math.round(washerFluid)}`;
         }
 
         // Combo timer

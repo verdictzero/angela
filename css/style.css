@@ -295,6 +295,47 @@ body {
     padding-bottom: 0;
 }
 
+/* Windshield Blood Canvas */
+#windshield-canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 41;
+    pointer-events: none;
+}
+
+/* Health Bar */
+#hud-health-bar {
+    position: fixed;
+    top: 140px;
+    right: 30px;
+    width: 150px;
+    height: 12px;
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 50, 50, 0.4);
+    border-radius: 2px;
+}
+
+#hud-health-fill {
+    width: 100%;
+    height: 100%;
+    background: #cc0000;
+    box-shadow: 0 0 6px rgba(255, 0, 0, 0.5);
+    transition: width 0.3s ease;
+}
+
+/* Washer Fluid Indicator */
+#hud-fluid {
+    font-size: 0.65rem;
+    color: #66aadd;
+    text-shadow: 0 0 4px rgba(80, 150, 220, 0.4);
+    letter-spacing: 0.06em;
+    margin-bottom: 4px;
+    opacity: 0.85;
+}
+
 /* Blood Overlay */
 #blood-overlay {
     position: fixed;

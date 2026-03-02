@@ -238,11 +238,19 @@ function gameLoop() {
     // Update killable NPCs (pass road points so they follow the road)
     killableNPCs.update(dt, camera, vehicle.position, vehicle.angle, road.points);
 
+    // Check tree collisions
+    const treeHit = foliage.checkTreeCollision(vehicle.position, 1.2);
+    if (treeHit) {
+        vehicle.applyTreeImpact(vehicle.speed);
+        cockpit.addBloodSplatter(0.3);
+    }
+
     // Check NPC hits
     const hits = killableNPCs.checkHits(vehicle.position, vehicle.angle, vehicle.speed);
     for (const hit of hits) {
         gore.spawn(hit.position, hit.velocity);
         vehicle.applyImpact(0.15);
+        cockpit.addBloodSplatter(1.0);
         hud.addKill();
     }
 
@@ -255,8 +263,8 @@ function gameLoop() {
         vehicle.applyImpact(0.05);
     }
 
-    // Update cockpit
-    cockpit.update(dt, vehicle);
+    // Update cockpit (pass input for wiper/washer controls)
+    cockpit.update(dt, vehicle, input);
 
     // Update camera — LHD offset
     updateCamera(dt);
@@ -308,7 +316,7 @@ function gameLoop() {
         pixelRatioNative: window.devicePixelRatio,
         canvasWidth: renderer.domElement.width,
         canvasHeight: renderer.domElement.height,
-    });
+    }, vehicle.health, cockpit.washerFluid);
 }
 
 function updateCamera(dt) {

@@ -14,6 +14,11 @@ export class InputManager {
         this.brake = 0;        // 0 to 1
         this.handbrake = false;
         this.boost = false;
+        this.wipers = false;   // toggle on F
+        this.washer = false;   // held on R
+
+        // Wiper toggle tracking
+        this._wipersToggle = false;
 
         // Keyboard state
         this._keys = {};
@@ -49,13 +54,19 @@ export class InputManager {
     _initKeyboard() {
         window.addEventListener('keydown', (e) => {
             this._keys[e.code] = true;
+            // Wiper toggle on F keydown edge
+            if (e.code === 'KeyF' && !this._wipersToggle) {
+                this._wipersToggle = true;
+                this.wipers = !this.wipers;
+            }
             // Prevent default for game keys
-            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight'].includes(e.code)) {
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight', 'KeyF', 'KeyR'].includes(e.code)) {
                 e.preventDefault();
             }
         });
         window.addEventListener('keyup', (e) => {
             this._keys[e.code] = false;
+            if (e.code === 'KeyF') this._wipersToggle = false;
         });
         // Reset keys on blur to prevent stuck keys
         window.addEventListener('blur', () => {
@@ -240,6 +251,9 @@ export class InputManager {
             if (this._touchGas) gas = Math.max(gas, 1);
             if (this._touchBrake) brake = Math.max(brake, 1);
         }
+
+        // Washer — held while R pressed
+        this.washer = !!(this._keys['KeyR']);
 
         // Finalize
         this.steer = clamp(steer, -1, 1);

@@ -31,8 +31,10 @@
         <div id="hud-speed">0 <span>km/h</span></div>
         <div id="hud-score">SCORE: 0</div>
         <div id="hud-combo" class="hidden"></div>
+        <div id="hud-health-bar"><div id="hud-health-fill"></div></div>
         <div id="hud-time">08:00 DAY</div>
         <div id="hud-debug-wrapper">
+            <div id="hud-fluid">FLUID: 100</div>
             <button id="btn-slowmo">SLOW MO</button>
             <button id="hud-debug-toggle">DEBUG</button>
             <div id="hud-debug"></div>
@@ -59,10 +61,14 @@
         <div id="start-prompt">CLICK / TAP TO START</div>
         <div id="controls-info">
             <div>WASD / Arrows — Steer &amp; Drive</div>
-            <div>Space — Handbrake</div>
+            <div>Space — Handbrake &nbsp; Shift — Boost</div>
+            <div>F — Wipers &nbsp; R — Washer Fluid</div>
             <div>Gamepad supported</div>
         </div>
     </div>
+
+    <!-- Windshield blood canvas -->
+    <canvas id="windshield-canvas"></canvas>
 
     <!-- Blood overlay -->
     <div id="blood-overlay"></div>
