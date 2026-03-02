@@ -90,13 +90,6 @@ export class GoreSystem {
             emissiveBoost: 0.35
         });
 
-        // Disable depth testing so gore renders on top of world geometry
-        // (matches cockpit.js approach — prevents depth buffer occlusion)
-        this._goreMat.depthTest = false;
-        this._chunkMat.depthTest = false;
-        this._subChunkMat.depthTest = false;
-        this._cloudMat.depthTest = false;
-
         this._decalTex = this._generateDecalTexture();
         this._decalMat = createUnlitMaterial(this._decalTex, {
             transparent: true, depthWrite: false,
@@ -333,9 +326,9 @@ export class GoreSystem {
                 position.z + randomRange(-0.3, 0.3)
             );
             s.velocity.set(
-                forward.x * vehicleSpeed * randomRange(1.5, 3.5) + randomRange(-4, 4),
-                randomRange(5, 16),
-                forward.z * vehicleSpeed * randomRange(1.5, 3.5) + randomRange(-4, 4)
+                forward.x * vehicleSpeed * randomRange(0.3, 1.2) + randomRange(-8, 8),
+                randomRange(4, 14),
+                forward.z * vehicleSpeed * randomRange(0.3, 1.2) + randomRange(-8, 8)
             );
             s.size = randomRange(SUB_CHUNK_SIZE_MIN, SUB_CHUNK_SIZE_MAX);
             s.lifetime = SUB_CHUNK_LIFETIME * randomRange(0.6, 1.0);
@@ -408,20 +401,12 @@ export class GoreSystem {
 
                 if (p.position.y <= 0.03) {
                     p.position.y = 0.03;
-                    if (Math.abs(p.velocity.y) > 1.5) {
-                        // Bounce with energy loss
-                        p.velocity.y *= -0.35;
-                        p.velocity.x *= 0.7;
-                        p.velocity.z *= 0.7;
-                        // Splat on first contact
-                        if (spawnDecalOnGround && !p.decalSpawned) {
-                            this._spawnDecal(p.position);
-                            this._spawnCloud(p.position);
-                            p.decalSpawned = true;
-                        }
-                    } else {
-                        p.grounded = true;
-                        p.lifetime = Math.min(p.lifetime, p.age + randomRange(0.3, 1.0));
+                    p.grounded = true;
+                    p.lifetime = Math.min(p.lifetime, p.age + randomRange(0.3, 1.0));
+                    if (spawnDecalOnGround && !p.decalSpawned) {
+                        this._spawnDecal(p.position);
+                        this._spawnCloud(p.position); // blood puff on ground impact
+                        p.decalSpawned = true;
                     }
                 }
             }
@@ -495,17 +480,9 @@ export class GoreSystem {
 
                 if (c.position.y <= 0.05) {
                     c.position.y = 0.05;
-                    if (Math.abs(c.velocity.y) > 2.0) {
-                        // Meaty bounce with energy loss
-                        c.velocity.y *= -0.4;
-                        c.velocity.x *= 0.65;
-                        c.velocity.z *= 0.65;
-                        this._spawnDecal(c.position); // splat on each bounce
-                    } else {
-                        c.grounded = true;
-                        c.hittable = true;
-                        this._spawnDecal(c.position);
-                    }
+                    c.grounded = true;
+                    c.hittable = true;
+                    this._spawnDecal(c.position);
                 }
             }
 
