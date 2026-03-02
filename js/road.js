@@ -2,22 +2,22 @@
  * Infinite Procedural Road Generator
  *
  * Road cross-section (from center outward):
- *   ±0 to ±3.5   Road surface (2 lanes, asphalt)
- *   ±3.5 to ±5.0  Shoulder (gravel)
- *   ±5.0 to ±5.3  Curb
- *   ±5.3 to ±8.3  Sidewalk (concrete)
- *   Beyond ±8.3   Ground (grass)
+ *   ±0 to ±8.75   Road surface (2 lanes, asphalt)
+ *   ±8.75 to ±11.75  Shoulder (gravel)
+ *   ±11.75 to ±12.35  Curb
+ *   ±12.35 to ±18.35  Sidewalk (concrete)
+ *   Beyond ±18.35   Ground (grass)
  */
 
 import * as THREE from 'three';
 import { randomRange, clamp, createCanvasTexture } from './utils.js';
 
-// ── Road dimensions ────────────────────────────────────────────
-const ROAD_HALF_WIDTH = 3.5;       // 2 lanes, each 3.5m
-const SHOULDER_WIDTH = 1.5;
-const CURB_WIDTH = 0.3;
+// ── Road dimensions (2x wider) ─────────────────────────────────
+const ROAD_HALF_WIDTH = 8.75;      // 2 lanes, each 8.75m
+const SHOULDER_WIDTH = 3.0;
+const CURB_WIDTH = 0.6;
 const CURB_HEIGHT = 0.15;
-const SIDEWALK_WIDTH = 3.0;
+const SIDEWALK_WIDTH = 6.0;
 const SHOULDER_INNER = ROAD_HALF_WIDTH;
 const SHOULDER_OUTER = ROAD_HALF_WIDTH + SHOULDER_WIDTH;
 const CURB_INNER = SHOULDER_OUTER;
@@ -27,7 +27,7 @@ const SW_OUTER = CURB_OUTER + SIDEWALK_WIDTH;
 
 const POINT_SPACING = 4;
 const POINTS_PER_CHUNK = 40;
-const GENERATE_AHEAD = 500;
+const GENERATE_AHEAD = 1500;
 const REMOVE_BEHIND = 200;
 const DASH_LENGTH = 3;
 const DASH_GAP = 4;
@@ -43,6 +43,7 @@ export class RoadManager {
         this.targetCurvature = 0;
         this.totalDistance = 0;
         this._nextChunkId = 0;
+        this._lastRemovedChunks = [];
 
         // Generate textures
         this._textures = this._generateTextures();
@@ -138,64 +139,26 @@ export class RoadManager {
             }
         }, 3, 3);
 
-        // Concrete sidewalk — panel grid with weathering
-        const sidewalk = this._makeTexture(128, 128, (ctx, w, h) => {
-            ctx.fillStyle = '#8a8a8a';
-            ctx.fillRect(0, 0, w, h);
-            // Panel grid lines
-            ctx.strokeStyle = '#747474';
-            ctx.lineWidth = 2;
-            for (let x = 0; x <= w; x += 32) {
-                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
-            }
-            for (let y = 0; y <= h; y += 32) {
-                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
-            }
-            // Surface noise
-            for (let i = 0; i < 2000; i++) {
-                const x = Math.random() * w, y = Math.random() * h;
-                const g = 120 + Math.random() * 35;
-                ctx.fillStyle = `rgb(${g},${g},${g})`;
-                ctx.fillRect(x, y, 1, 1);
-            }
-            // Weathering stains
-            for (let i = 0; i < 3; i++) {
-                ctx.fillStyle = `rgba(60,60,55,${0.08 + Math.random() * 0.08})`;
-                ctx.beginPath();
-                ctx.arc(Math.random() * w, Math.random() * h, 8 + Math.random() * 12, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        }, 2, 2);
+        // Concrete sidewalk — file-based texture
+        const sidewalkTex = new THREE.TextureLoader().load('assets/sidewalk.png');
+        sidewalkTex.wrapS = THREE.RepeatWrapping;
+        sidewalkTex.wrapT = THREE.RepeatWrapping;
+        sidewalkTex.repeat.set(2, 2);
+        sidewalkTex.offset.set(0.5, 0);
+        sidewalkTex.colorSpace = THREE.SRGBColorSpace;
+        sidewalkTex.magFilter = THREE.NearestFilter;
+        sidewalkTex.minFilter = THREE.NearestFilter;
+        const sidewalk = sidewalkTex;
 
-        // Grass ground — rich green with variation
-        const grass = this._makeTexture(256, 256, (ctx, w, h) => {
-            // Base gradient
-            ctx.fillStyle = '#2a4a1a';
-            ctx.fillRect(0, 0, w, h);
-            // Blade-like noise
-            for (let i = 0; i < 10000; i++) {
-                const x = Math.random() * w, y = Math.random() * h;
-                const r = 20 + Math.random() * 35;
-                const g = r + 20 + Math.random() * 30;
-                const b = 8 + Math.random() * 15;
-                ctx.fillStyle = `rgb(${r},${g},${b})`;
-                ctx.fillRect(x, y, 1 + Math.random(), 1 + Math.random() * 3);
-            }
-            // Dark soil patches
-            for (let i = 0; i < 10; i++) {
-                ctx.fillStyle = `rgba(18,28,10,${0.12 + Math.random() * 0.15})`;
-                ctx.beginPath();
-                ctx.arc(Math.random() * w, Math.random() * h, 8 + Math.random() * 18, 0, Math.PI * 2);
-                ctx.fill();
-            }
-            // Light patches (sun spots)
-            for (let i = 0; i < 5; i++) {
-                ctx.fillStyle = `rgba(50,80,30,${0.1 + Math.random() * 0.1})`;
-                ctx.beginPath();
-                ctx.arc(Math.random() * w, Math.random() * h, 12 + Math.random() * 20, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        }, 120, 120);
+        // Grass ground — loaded from texture file
+        const grassTex = new THREE.TextureLoader().load('assets/terrain/terrain_new_meadow_grass_checkered_v2.png');
+        grassTex.wrapS = THREE.RepeatWrapping;
+        grassTex.wrapT = THREE.RepeatWrapping;
+        grassTex.repeat.set(480, 480);
+        grassTex.colorSpace = THREE.SRGBColorSpace;
+        grassTex.magFilter = THREE.NearestFilter;
+        grassTex.minFilter = THREE.NearestFilter;
+        const grass = grassTex;
 
         return { road, shoulder, sidewalk, grass };
     }
@@ -207,6 +170,8 @@ export class RoadManager {
         tex.wrapT = THREE.RepeatWrapping;
         tex.repeat.set(repeatX, repeatY);
         tex.colorSpace = THREE.SRGBColorSpace;
+        tex.magFilter = THREE.NearestFilter;
+        tex.minFilter = THREE.NearestFilter;
         return tex;
     }
 
@@ -287,12 +252,12 @@ export class RoadManager {
 
         // ── Lane markings ──────────────────────────────────────
         // Double yellow center line (2 lines with small gap)
-        this._addSolidLine(group, startIdx, endIdx, -0.15, 0.02, 0.07, this._yellowMat);
-        this._addSolidLine(group, startIdx, endIdx, 0.15, 0.02, 0.07, this._yellowMat);
+        this._addSolidLine(group, startIdx, endIdx, -0.20, 0.02, 0.08, this._yellowMat);
+        this._addSolidLine(group, startIdx, endIdx, 0.20, 0.02, 0.08, this._yellowMat);
 
         // White edge lines (where road meets shoulder)
-        this._addSolidLine(group, startIdx, endIdx, -ROAD_HALF_WIDTH + 0.15, 0.02, 0.08, this._markingMat);
-        this._addSolidLine(group, startIdx, endIdx, ROAD_HALF_WIDTH - 0.15, 0.02, 0.08, this._markingMat);
+        this._addSolidLine(group, startIdx, endIdx, -ROAD_HALF_WIDTH + 0.25, 0.02, 0.10, this._markingMat);
+        this._addSolidLine(group, startIdx, endIdx, ROAD_HALF_WIDTH - 0.25, 0.02, 0.10, this._markingMat);
 
         const chunk = { id: this._nextChunkId++, group, startIdx, endIdx, startDist: startIdx * POINT_SPACING };
         this.scene.add(group);
@@ -474,6 +439,19 @@ export class RoadManager {
         return this.chunks.filter(c => c.id > lastId);
     }
 
+    /**
+     * Return the chunk containing the given world position, or null.
+     */
+    getChunkAt(pos) {
+        const idx = this._findClosestPointIndex(pos);
+        for (const chunk of this.chunks) {
+            if (idx >= chunk.startIdx && idx < chunk.endIdx) {
+                return chunk;
+            }
+        }
+        return this.chunks.length > 0 ? this.chunks[0] : null;
+    }
+
     getSpawnPositions(chunkIndex) {
         if (chunkIndex >= this.chunks.length) return [];
         return this._spawnPositionsForChunk(this.chunks[chunkIndex]);
@@ -481,29 +459,18 @@ export class RoadManager {
 
     _spawnPositionsForChunk(chunk) {
         const positions = [];
-        for (let i = chunk.startIdx + 5; i < chunk.endIdx - 5; i += 8) {
+        for (let i = chunk.startIdx + 2; i < chunk.endIdx - 2; i += 15) {
             const pt = this.points[i];
-            // On road
-            const roadLat = randomRange(-ROAD_HALF_WIDTH + 0.8, ROAD_HALF_WIDTH - 0.8);
+            const roadLat = randomRange(-ROAD_HALF_WIDTH + 1.5, ROAD_HALF_WIDTH - 1.5);
             positions.push({
                 position: new THREE.Vector3(
                     pt.position.x + pt.right.x * roadLat, 0,
                     pt.position.z + pt.right.z * roadLat
                 ),
+                forward: pt.forward.clone(),
+                lateralOffset: roadLat,
                 roadIndex: i, type: 'road'
             });
-            // On sidewalk occasionally
-            if (Math.random() > 0.5) {
-                const side = Math.random() > 0.5 ? 1 : -1;
-                const swLat = side * (SW_INNER + randomRange(0.4, SIDEWALK_WIDTH - 0.4));
-                positions.push({
-                    position: new THREE.Vector3(
-                        pt.position.x + pt.right.x * swLat, CURB_HEIGHT,
-                        pt.position.z + pt.right.z * swLat
-                    ),
-                    roadIndex: i, type: 'sidewalk'
-                });
-            }
         }
         return positions;
     }
@@ -522,10 +489,12 @@ export class RoadManager {
 
         this._buildAllNeededChunks(playerPos);
 
+        this._lastRemovedChunks = [];
         const playerIdx = this._findClosestPointIndex(playerPos);
         const removeBeforeIdx = playerIdx - Math.ceil(REMOVE_BEHIND / POINT_SPACING);
         while (this.chunks.length > 0 && this.chunks[0].endIdx < removeBeforeIdx) {
             const old = this.chunks.shift();
+            this._lastRemovedChunks.push(old.id);
             this.scene.remove(old.group);
             old.group.traverse((child) => {
                 if (child.geometry) child.geometry.dispose();
@@ -535,5 +504,9 @@ export class RoadManager {
 
     get chunkCount() {
         return this.chunks.length;
+    }
+
+    get removedChunkIds() {
+        return this._lastRemovedChunks;
     }
 }

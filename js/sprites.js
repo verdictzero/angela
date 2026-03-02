@@ -7,6 +7,9 @@
 
 import * as THREE from 'three';
 import { normalizeAngle, createCanvasTexture } from './utils.js';
+import { createUnlitMaterial } from './shaders.js';
+
+const _camDir = new THREE.Vector3();
 
 /**
  * Sprite direction indices:
@@ -217,16 +220,16 @@ export class DirectionalSprite {
      * Update billboard rotation and sprite direction.
      * Call every frame.
      */
-    update(cameraPosition) {
+    update(camera) {
+        // Camera-plane Y-axis billboarding: all sprites face the same direction
+        const dir = camera.getWorldDirection(_camDir);
+        this.mesh.rotation.y = Math.atan2(dir.x, dir.z) + Math.PI;
+
+        // Direction selection still uses camera position for which face to show
         const spritePos = this.mesh.position;
-
-        // Y-billboard: face camera on Y axis only
-        const dx = cameraPosition.x - spritePos.x;
-        const dz = cameraPosition.z - spritePos.z;
+        const dx = camera.position.x - spritePos.x;
+        const dz = camera.position.z - spritePos.z;
         const angleToCamera = Math.atan2(dx, dz);
-
-        // Set Y-billboard rotation
-        this.mesh.rotation.y = angleToCamera;
 
         // Determine which sprite direction to show
         const relAngle = normalizeAngle(angleToCamera - this.facingAngle);
@@ -277,5 +280,39 @@ export class DirectionalSprite {
         this._materials.front.dispose();
         this._materials.side.dispose();
         this._materials.back.dispose();
+    }
+}
+
+/**
+ * BillboardSprite — a Y-billboarded sprite with a single texture,
+ * rendered using the unlit ambient-tint shader.
+ */
+export class BillboardSprite {
+    constructor(texture, width = 2, height = 2) {
+        const geo = new THREE.PlaneGeometry(width, height);
+        // Anchor bottom of sprite at y=0
+        geo.translate(0, height / 2, 0);
+
+        const mat = createUnlitMaterial(texture, {
+            transparent: true,
+            alphaTest: 0.1,
+            side: THREE.DoubleSide,
+        });
+
+        this.mesh = new THREE.Mesh(geo, mat);
+    }
+
+    update(camera) {
+        const dir = camera.getWorldDirection(_camDir);
+        this.mesh.rotation.y = Math.atan2(dir.x, dir.z) + Math.PI;
+    }
+
+    setPosition(x, y, z) {
+        this.mesh.position.set(x, y, z);
+    }
+
+    dispose() {
+        this.mesh.geometry.dispose();
+        this.mesh.material.dispose();
     }
 }

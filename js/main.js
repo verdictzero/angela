@@ -6,15 +6,20 @@
  */
 
 import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { InputManager } from './input.js';
 import { RoadManager } from './road.js';
 import { Vehicle } from './vehicle.js';
 import { Cockpit, DRIVER_OFFSET_X } from './cockpit.js';
-import { MonsterManager } from './monsters.js';
+import { KillableNPCManager } from './killable_npcs.js';
 import { GoreSystem } from './gore.js';
 import { HUD } from './hud.js';
 import { DayNightCycle } from './daynight.js';
 import { DebugStats } from './debugStats.js';
+import { FoliageManager } from './foliage.js';
+import { unlitUniforms } from './shaders.js';
 
 // ── Scene Setup ──────────────────────────────────────────────
 
@@ -28,6 +33,10 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 container.appendChild(renderer.domElement);
 
+// Disable auto-reset so renderer.info stats accumulate across all
+// EffectComposer passes (scene render + bloom).  We reset manually each frame.
+renderer.info.autoReset = false;
+
 const scene = new THREE.Scene();
 
 // Fog — dynamically controlled by day/night cycle
@@ -37,8 +46,21 @@ scene.background = new THREE.Color(0x1a2a1a);
 
 // Camera
 const camera = new THREE.PerspectiveCamera(
-    75, window.innerWidth / window.innerHeight, 0.1, 500
+    75, window.innerWidth / window.innerHeight, 0.1, 600
 );
+
+// ── Post-Processing ──────────────────────────────────────────
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+
+const bloomPass = new UnrealBloomPass(
+    new THREE.Vector2(window.innerWidth, window.innerHeight),
+    0.55,  // strength
+    0.6,   // radius
+    0.78   // threshold
+);
+composer.addPass(bloomPass);
 
 // ── Lighting ──────────────────────────────────────────────────
 
@@ -58,24 +80,29 @@ const input = new InputManager();
 const road = new RoadManager(scene);
 const vehicle = new Vehicle();
 const cockpit = new Cockpit(camera);
-const monsters = new MonsterManager(scene);
+const killableNPCs = new KillableNPCManager(scene);
 const gore = new GoreSystem(scene);
-const hud = new HUD();
+const hud = new HUD(renderer);
 const dayNight = new DayNightCycle(scene);
 const debugStats = new DebugStats();
+const foliage = new FoliageManager(scene, road);
 
 // Cockpit is child of camera, add camera to scene
 scene.add(camera);
 
-// ── Monster Spawning ──────────────────────────────────────────
+// ── NPC Spawning ─────────────────────────────────────────────
 
 let lastSpawnedChunkId = -1;
+const spawnedChunkIds = new Set();
 
-function spawnMonstersForNewChunks() {
+function spawnNPCsForNewChunks() {
     const newChunks = road.getNewChunks(lastSpawnedChunkId);
     for (const chunk of newChunks) {
-        const spawnPositions = road._spawnPositionsForChunk(chunk);
-        monsters.spawnFromChunk(chunk.id, spawnPositions);
+        if (!spawnedChunkIds.has(chunk.id)) {
+            const spawnPositions = road._spawnPositionsForChunk(chunk);
+            killableNPCs.spawnFromChunk(chunk.id, spawnPositions, road.points);
+            spawnedChunkIds.add(chunk.id);
+        }
         if (chunk.id > lastSpawnedChunkId) lastSpawnedChunkId = chunk.id;
     }
 }
@@ -88,7 +115,14 @@ const startScreen = document.getElementById('start-screen');
 function startGame() {
     if (gameStarted) return;
     gameStarted = true;
-    if (startScreen) startScreen.style.display = 'none';
+
+    // Fade out start screen instead of instant hide
+    if (startScreen) {
+        startScreen.classList.add('fade-out');
+        startScreen.addEventListener('transitionend', () => {
+            startScreen.style.display = 'none';
+        }, { once: true });
+    }
 
     try {
         renderer.domElement.requestPointerLock();
@@ -105,17 +139,47 @@ if (startScreen) {
 
 window.addEventListener('keydown', startGame, { once: false });
 
-// ── Resize Handling ───────────────────────────────────────────
+// ── Resize Handling (with "Updating UI" overlay) ─────────────
 
-window.addEventListener('resize', () => {
+const updatingOverlay = document.getElementById('updating-ui-overlay');
+let resizeTimer = null;
+
+function doResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
-});
+    composer.setSize(window.innerWidth, window.innerHeight);
+}
+
+function onResize() {
+    if (!updatingOverlay) {
+        doResize();
+        return;
+    }
+
+    // Fade in the overlay (CSS transition handles animation)
+    updatingOverlay.classList.add('visible');
+
+    // Clear previous debounce timer
+    if (resizeTimer) clearTimeout(resizeTimer);
+
+    // Wait for resize events to settle, then resize and fade out
+    resizeTimer = setTimeout(() => {
+        doResize();
+        requestAnimationFrame(() => {
+            updatingOverlay.classList.remove('visible');
+        });
+    }, 400);
+}
+
+window.addEventListener('resize', onResize);
+window.addEventListener('orientationchange', onResize);
 
 // ── Game Loop ─────────────────────────────────────────────────
 
 let prevTime = performance.now();
+let sceneStatsCache = { objects: 0, materials: 0, lights: 0 };
+let sceneStatsFrame = 0;
 
 function gameLoop() {
     requestAnimationFrame(gameLoop);
@@ -128,8 +192,17 @@ function gameLoop() {
     // Day/night cycle (always runs, even on start screen)
     const intensity = dayNight.update(dt, ambient, dirLight, hemiLight, fog, scene);
 
+    // Sync shared unlit shader uniforms with day/night state
+    unlitUniforms.ambientTint.value.copy(dayNight.currentColors.ambientTint);
+    unlitUniforms.fogColor.value.copy(fog.color);
+    unlitUniforms.fogStart.value = fog.near;
+    unlitUniforms.fogEnd.value = fog.far;
+
     // Headlights follow day/night
     cockpit.setHeadlightIntensity(intensity.headlight);
+
+    // Headlight uniforms for unlit shader (updated after updateCamera sets camera.position)
+    unlitUniforms.headlightIntensity.value = intensity.headlight / 50.0;
 
     // Tone mapping exposure shifts slightly with time of day
     renderer.toneMappingExposure = dayNight.isNight ? 0.8 : 1.1;
@@ -142,7 +215,8 @@ function gameLoop() {
 
     if (!gameStarted) {
         updateCamera(dt);
-        renderer.render(scene, camera);
+        renderer.info.reset();
+        composer.render();
         debugStats.update(dt, renderer);
         return;
     }
@@ -159,22 +233,28 @@ function gameLoop() {
     // Update road (generate ahead, remove behind)
     road.update(vehicle.position);
 
-    // Spawn monsters in new chunks
-    spawnMonstersForNewChunks();
+    // Spawn NPCs in new chunks
+    spawnNPCsForNewChunks();
 
-    // Update monsters
-    monsters.update(dt, camera.position, vehicle.position, vehicle.angle);
+    // Update killable NPCs (pass road points so they follow the road)
+    killableNPCs.update(dt, camera, vehicle.position, vehicle.angle, road.points);
 
-    // Check monster hits
-    const hits = monsters.checkHits(vehicle.position, vehicle.angle, vehicle.speed);
+    // Check NPC hits
+    const hits = killableNPCs.checkHits(vehicle.position, vehicle.angle, vehicle.speed);
     for (const hit of hits) {
         gore.spawn(hit.position, hit.velocity);
         vehicle.applyImpact(0.15);
         hud.addKill();
     }
 
-    // Update gore particles
-    gore.update(dt, camera.position);
+    // Update foliage (distance culling + billboards)
+    foliage.update(camera);
+
+    // Update gore particles + chunk hit detection
+    const chunkHits = gore.update(dt, camera, vehicle.position, vehicle.angle, vehicle.speed);
+    for (let i = 0; i < chunkHits; i++) {
+        vehicle.applyImpact(0.05);
+    }
 
     // Update cockpit
     cockpit.update(dt, vehicle);
@@ -182,14 +262,57 @@ function gameLoop() {
     // Update camera — LHD offset
     updateCamera(dt);
 
-    // Update HUD
-    hud.update(dt, vehicle.speedKmh, dayNight.getTimeString(), dayNight.getPhaseName());
+    // Sync headlight pos/dir now that camera is positioned
+    unlitUniforms.headlightPos.value.copy(camera.position);
+    unlitUniforms.headlightDir.value.copy(vehicle.getForward());
 
-    // Render
-    renderer.render(scene, camera);
+    // Scene stats (computed every 30 frames to avoid traversal overhead)
+    sceneStatsFrame++;
+    if (sceneStatsFrame % 30 === 0) {
+        let objCount = 0, lightCount = 0;
+        const matSet = new Set();
+        scene.traverse((obj) => {
+            objCount++;
+            if (obj.isMesh && obj.material) {
+                if (Array.isArray(obj.material)) {
+                    obj.material.forEach(m => matSet.add(m));
+                } else {
+                    matSet.add(obj.material);
+                }
+            }
+            if (obj.isLight) lightCount++;
+        });
+        sceneStatsCache = { objects: objCount, materials: matSet.size, lights: lightCount };
+    }
+
+    // Render — reset stats manually, then render so stats accumulate across all passes
+    renderer.info.reset();
+    composer.render();
 
     // Debug stats — MUST be after render so renderer.info has current frame data
     debugStats.update(dt, renderer);
+
+    // Update HUD after render so renderer.info has accurate stats
+    const currentChunk = road.getChunkAt(vehicle.position);
+    hud.update(dt, vehicle.speedKmh, dayNight.getTimeString(), dayNight.getPhaseName(), {
+        chunkId: currentChunk ? currentChunk.id : -1,
+        x: Math.round(vehicle.position.x),
+        z: Math.round(vehicle.position.z),
+        npcCount: killableNPCs.aliveCount,
+        sceneObjects: sceneStatsCache.objects,
+        sceneMaterials: sceneStatsCache.materials,
+        sceneLights: sceneStatsCache.lights,
+        bloomStrength: bloomPass.strength,
+        bloomRadius: bloomPass.radius,
+        bloomThreshold: bloomPass.threshold,
+        toneMapping: 'ACES Filmic',
+        toneMappingExposure: renderer.toneMappingExposure,
+        colorSpace: renderer.outputColorSpace,
+        pixelRatioCapped: Math.min(window.devicePixelRatio, 2),
+        pixelRatioNative: window.devicePixelRatio,
+        canvasWidth: renderer.domElement.width,
+        canvasHeight: renderer.domElement.height,
+    });
 }
 
 function updateCamera(dt) {
@@ -215,5 +338,66 @@ function updateCamera(dt) {
 
 // ── Initialize ────────────────────────────────────────────────
 
-spawnMonstersForNewChunks();
+spawnNPCsForNewChunks();
 gameLoop();
+
+// ── Loading Screen Dismissal ─────────────────────────────────
+// Robust readiness gate: waits for minimum display time, rendered frame,
+// and HUD DOM layout before fading out.
+const loadingScreen = document.getElementById('loading-screen');
+const loadingStatus = document.getElementById('loading-status');
+const MINIMUM_LOADING_MS = 1500;
+const MAX_LOADING_MS = 8000;
+const loadStartTime = performance.now();
+let loadingDismissed = false;
+
+function checkReadyToDismiss() {
+    if (loadingDismissed) return;
+
+    const elapsed = performance.now() - loadStartTime;
+
+    // Safety fallback — dismiss after 8s no matter what
+    if (elapsed >= MAX_LOADING_MS) {
+        dismissLoading();
+        return;
+    }
+
+    // Condition 1: minimum display time
+    if (elapsed < MINIMUM_LOADING_MS) {
+        if (loadingStatus) loadingStatus.textContent = 'Preparing scene...';
+        requestAnimationFrame(checkReadyToDismiss);
+        return;
+    }
+
+    // Condition 2: at least one frame rendered
+    if (renderer.info.render.frame < 1) {
+        if (loadingStatus) loadingStatus.textContent = 'Rendering first frame...';
+        requestAnimationFrame(checkReadyToDismiss);
+        return;
+    }
+
+    // Condition 3: HUD elements have laid out
+    const speedEl = document.getElementById('hud-speed');
+    const debugEl = document.getElementById('hud-debug');
+    if (!speedEl || speedEl.offsetHeight === 0 || !debugEl) {
+        if (loadingStatus) loadingStatus.textContent = 'Laying out UI...';
+        requestAnimationFrame(checkReadyToDismiss);
+        return;
+    }
+
+    // All conditions met
+    dismissLoading();
+}
+
+function dismissLoading() {
+    if (loadingDismissed) return;
+    loadingDismissed = true;
+    if (loadingScreen) {
+        loadingScreen.classList.add('fade-out');
+        loadingScreen.addEventListener('transitionend', () => {
+            loadingScreen.style.display = 'none';
+        }, { once: true });
+    }
+}
+
+requestAnimationFrame(checkReadyToDismiss);

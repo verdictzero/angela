@@ -1,233 +1,199 @@
 /**
- * Cockpit Interior — Left-Hand Drive
+ * Cockpit — 2D Image Plane Overlay
  *
- * Renders a first-person car dashboard with the steering wheel
- * on the LEFT side (LHD). Driver sits on the left, center console
- * and passenger space to the right.
+ * Dashboard and steering wheel as textured planes attached to the camera.
+ * Both layers track together with the same parallax sway on steering.
  */
 
 import * as THREE from 'three';
-import { lerp, createCanvasTexture } from './utils.js';
+import { lerp } from './utils.js';
+import { createUnlitMaterial } from './shaders.js';
 
-// LHD driver offset: steering wheel is to the left of center
+// LHD driver offset — used by main.js for camera positioning
 const DRIVER_X = -0.35;
+
+// ── Layer depths (negative Z = forward from camera) ──────────
+const DASH_Z = -1.5;
+const WHEEL_Z = -1.2;
+const Z_RATIO_WHEEL = Math.abs(WHEEL_Z) / Math.abs(DASH_Z);
+
+// ── Dashboard ────────────────────────────────────────────────
+const DASH_WIDTH_PAD = 1.15;   // wider than viewport to cover edges during sway
+const MIN_DASH_ASPECT = 2.0;   // minimum effective viewport aspect — prevents portrait squish
+
+// ── Steering wheel — centered on red + from dash_notes ──────
+// Red + position in dash image coords (0-1, top-left origin)
+const RED_CROSS_X = 0.22;
+const RED_CROSS_Y = 0.73;
+const WHEEL_SIZE_FRAC = 1.70;  // wheel height as fraction of dash height (2x)
+
+// ── Sway ─────────────────────────────────────────────────────
+const SWAY_AMOUNT = 0.15;
+const SWAY_SPEED = 6;
+const COCKPIT_PARALLAX = 0.7;  // same for dash and wheel — they track together
 
 export class Cockpit {
     constructor(camera) {
         this.camera = camera;
         this.group = new THREE.Group();
-        this.camera.add(this.group);
+        camera.add(this.group);
 
-        this._buildDashboard();
-        this._buildSteeringWheel();
-        this._buildWindshieldFrame();
-        this._buildDoorPanel();
-        this._buildHeadlights();
-        this._buildInteriorLighting();
+        this.dashMesh = null;
+        this.underDashMesh = null;
+        this.wheelMesh = null;
+        this.dashAspect = 2.4;
+        this.underDashAspect = 2.0;
+        this.wheelAspect = 1.0;
 
-        this.wheelTargetAngle = 0;
+        this.swayX = 0;
         this.wheelCurrentAngle = 0;
+
+        // Base positions (set in _updateLayout, sway added in update)
+        this._dashBaseX = 0;
+        this._wheelBaseX = 0;
+        this._wheelBaseY = 0;
+
+        this._loadImages();
+        this._buildHeadlights();
+
+        window.addEventListener('resize', () => this._updateLayout());
     }
 
-    _buildDashboard() {
-        const dashMat = new THREE.MeshLambertMaterial({ color: 0x2a2a2e });
-        const darkMat = new THREE.MeshLambertMaterial({ color: 0x1e1e22 });
+    // ── Image Loading ────────────────────────────────────────
 
-        // Main dashboard — full width
-        const dash = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.15, 0.8), dashMat);
-        dash.position.set(0.1, -0.55, -1.2);
-        this.group.add(dash);
+    _loadImages() {
+        const loader = new THREE.TextureLoader();
 
-        // Dashboard top surface
-        const dashTop = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.05, 0.5), dashMat);
-        dashTop.position.set(0.1, -0.45, -1.0);
-        dashTop.rotation.x = -0.3;
-        this.group.add(dashTop);
+        loader.load('assets/dashboard.png', (tex) => {
+            tex.colorSpace = THREE.SRGBColorSpace;
+            tex.magFilter = THREE.NearestFilter;
+            tex.minFilter = THREE.NearestFilter;
+            this.dashAspect = tex.image.width / tex.image.height;
 
-        // Instrument cluster (behind steering wheel, left side)
-        const cluster = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.32, 0.05), darkMat);
-        cluster.position.set(DRIVER_X, -0.35, -1.35);
-        cluster.rotation.x = -0.4;
-        this.group.add(cluster);
+            const mat = createUnlitMaterial(tex, {
+                transparent: true,
+                alphaTest: 0.01,
+                depthWrite: false,
+            });
+            mat.depthTest = false;
 
-        // Instrument binnacle hood
-        const hood = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.08, 0.2), dashMat);
-        hood.position.set(DRIVER_X, -0.27, -1.3);
-        hood.rotation.x = -0.2;
-        this.group.add(hood);
+            this.dashMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
+            this.dashMesh.renderOrder = 100;
+            this.dashMesh.position.z = DASH_Z;
+            this.group.add(this.dashMesh);
+            this._updateLayout();
+        });
 
-        // Tachometer circle (left gauge)
-        const tachoGeo = new THREE.RingGeometry(0.06, 0.08, 16);
-        const gaugeMat = new THREE.MeshBasicMaterial({ color: 0xeeeeee, side: THREE.DoubleSide });
-        const tacho = new THREE.Mesh(tachoGeo, gaugeMat);
-        tacho.position.set(DRIVER_X - 0.12, -0.34, -1.33);
-        tacho.rotation.x = -0.4;
-        this.group.add(tacho);
+        loader.load('assets/under_dash.png', (tex) => {
+            tex.colorSpace = THREE.SRGBColorSpace;
+            tex.magFilter = THREE.NearestFilter;
+            tex.minFilter = THREE.NearestFilter;
+            this.underDashAspect = tex.image.width / tex.image.height;
 
-        // Speedometer circle (right gauge)
-        const speedo = new THREE.Mesh(tachoGeo.clone(), gaugeMat);
-        speedo.position.set(DRIVER_X + 0.12, -0.34, -1.33);
-        speedo.rotation.x = -0.4;
-        this.group.add(speedo);
+            const mat = createUnlitMaterial(tex, {
+                transparent: true,
+                alphaTest: 0.01,
+                depthWrite: false,
+            });
+            mat.depthTest = false;
 
-        // Speed indicator light
-        this._speedIndicator = new THREE.Mesh(
-            new THREE.PlaneGeometry(0.06, 0.06),
-            new THREE.MeshBasicMaterial({ color: 0x00ff00 })
-        );
-        this._speedIndicator.position.set(DRIVER_X, -0.31, -1.33);
-        this._speedIndicator.rotation.x = -0.4;
-        this.group.add(this._speedIndicator);
+            this.underDashMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
+            this.underDashMesh.renderOrder = 99;
+            this.underDashMesh.position.z = DASH_Z;
+            this.group.add(this.underDashMesh);
+            this._updateLayout();
+        });
 
-        // Center console (between driver and passenger)
-        const centerConsole = new THREE.Mesh(
-            new THREE.BoxGeometry(0.28, 0.38, 0.7),
-            new THREE.MeshLambertMaterial({ color: 0x151515 })
-        );
-        centerConsole.position.set(0.15, -0.72, -0.85);
-        this.group.add(centerConsole);
+        loader.load('assets/steering_wheel.png', (tex) => {
+            tex.colorSpace = THREE.SRGBColorSpace;
+            tex.magFilter = THREE.NearestFilter;
+            tex.minFilter = THREE.NearestFilter;
+            this.wheelAspect = tex.image.width / tex.image.height;
 
-        // Radio/infotainment screen (dark rectangle on center dash)
-        const screen = new THREE.Mesh(
-            new THREE.PlaneGeometry(0.28, 0.18),
-            new THREE.MeshBasicMaterial({ color: 0x0a0a15 })
-        );
-        screen.position.set(0.15, -0.38, -1.34);
-        screen.rotation.x = -0.35;
-        this.group.add(screen);
+            const mat = createUnlitMaterial(tex, {
+                transparent: true,
+                alphaTest: 0.01,
+                depthWrite: false,
+            });
+            mat.depthTest = false;
 
-        // Passenger side glove box area
-        const glovebox = new THREE.Mesh(
-            new THREE.BoxGeometry(0.5, 0.2, 0.35),
-            new THREE.MeshLambertMaterial({ color: 0x181818 })
-        );
-        glovebox.position.set(0.65, -0.58, -1.15);
-        this.group.add(glovebox);
+            this.wheelMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
+            this.wheelMesh.renderOrder = 102;
+            this.wheelMesh.position.z = WHEEL_Z;
+            this.group.add(this.wheelMesh);
+            this._updateLayout();
+        });
+    }
 
-        // AC vents (small dark rectangles across dash)
-        const ventMat = new THREE.MeshLambertMaterial({ color: 0x0f0f0f });
-        for (const vx of [DRIVER_X - 0.4, 0.15, 0.65]) {
-            const vent = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.04, 0.03), ventMat);
-            vent.position.set(vx, -0.42, -1.38);
-            this.group.add(vent);
+    // ── Layout ───────────────────────────────────────────────
+
+    /**
+     * Convert a point in dash image coords (0-1, top-left origin)
+     * to camera-space position at a target Z plane.
+     */
+    _dashImageToCamera(imgX, imgY, targetZ) {
+        const s = this.dashMesh.scale;
+        const p = this.dashMesh.position;
+        const camX = p.x + (imgX - 0.5) * s.x;
+        const camY = p.y + (0.5 - imgY) * s.y;
+        const zRatio = Math.abs(targetZ) / Math.abs(DASH_Z);
+        return { x: camX * zRatio, y: camY * zRatio };
+    }
+
+    _updateLayout() {
+        if (!this.dashMesh) return;
+
+        const fov = this.camera.fov * Math.PI / 180;
+        const aspect = this.camera.aspect;
+        const dDash = Math.abs(DASH_Z);
+        const visH_dash = 2 * dDash * Math.tan(fov / 2);
+        const visW_dash = visH_dash * aspect;
+
+        // ── Dashboard — fill width (clamped so portrait doesn't squish)
+        const effectiveAspect = Math.max(aspect, MIN_DASH_ASPECT);
+        const dashW = (visH_dash * effectiveAspect) * DASH_WIDTH_PAD;
+        const dashH = dashW / this.dashAspect;
+
+        this.dashMesh.scale.set(dashW, dashH, 1);
+        // Bottom third: top edge at -visH_dash/2 + visH_dash/3 = -visH_dash/6
+        // Mesh center = topEdge - dashH/2
+        this.dashMesh.position.y = -visH_dash / 6 - dashH / 2;
+        this._dashBaseX = 0;
+
+        // Reset UVs to show full texture (no cropping)
+        const uv = this.dashMesh.geometry.getAttribute('uv');
+        uv.setY(0, 1);
+        uv.setY(1, 1);
+        uv.needsUpdate = true;
+
+        // ── Under-dash — top edge at 75% down dashboard, extends below viewport
+        if (this.underDashMesh) {
+            const topY = this.dashMesh.position.y + dashH / 2 - dashH * 0.75;
+            const udW = dashW;
+            const udH = udW / this.underDashAspect;
+            // If the image isn't tall enough to extend well below viewport, scale it up
+            const minUdH = visH_dash;
+            const finalUdH = Math.max(udH, minUdH);
+            const finalUdW = finalUdH * this.underDashAspect;
+            this.underDashMesh.scale.set(Math.max(udW, finalUdW), finalUdH, 1);
+            this.underDashMesh.position.y = topY - finalUdH / 2;
+        }
+
+        // ── Steering wheel — center on red + position
+        if (this.wheelMesh) {
+            const pos = this._dashImageToCamera(RED_CROSS_X, RED_CROSS_Y, WHEEL_Z);
+            this._wheelBaseX = pos.x;
+            this._wheelBaseY = pos.y;
+
+            const wheelH = dashH * WHEEL_SIZE_FRAC * Z_RATIO_WHEEL;
+            const wheelW = wheelH * this.wheelAspect;
+            this.wheelMesh.scale.set(wheelW, wheelH, 1);
+            this.wheelMesh.position.x = this._wheelBaseX;
+            this.wheelMesh.position.y = this._wheelBaseY;
         }
     }
 
-    _buildSteeringWheel() {
-        const columnMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
-
-        // Steering column (angled toward driver)
-        const column = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.5, 8), columnMat);
-        column.rotation.x = Math.PI / 2 + 0.4;
-        column.position.set(DRIVER_X, -0.42, -1.05);
-        this.group.add(column);
-
-        // Steering wheel group (rotates)
-        this._wheelGroup = new THREE.Group();
-        this._wheelGroup.position.set(DRIVER_X, -0.32, -0.85);
-        this._wheelGroup.rotation.x = -0.3;
-
-        // Wheel ring
-        const ring = new THREE.Mesh(
-            new THREE.TorusGeometry(0.18, 0.016, 8, 24),
-            new THREE.MeshLambertMaterial({ color: 0x1a1a1a })
-        );
-        this._wheelGroup.add(ring);
-
-        // Leather wrapping (slightly different shade)
-        const wrapRing = new THREE.Mesh(
-            new THREE.TorusGeometry(0.18, 0.018, 8, 24),
-            new THREE.MeshLambertMaterial({ color: 0x151515, transparent: true, opacity: 0.5 })
-        );
-        this._wheelGroup.add(wrapRing);
-
-        // 3 spokes
-        const spokeMat = new THREE.MeshLambertMaterial({ color: 0x252525 });
-        for (let i = 0; i < 3; i++) {
-            const angle = (i / 3) * Math.PI * 2 - Math.PI / 2;
-            const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.014, 0.014), spokeMat);
-            spoke.position.set(Math.cos(angle) * 0.09, Math.sin(angle) * 0.09, 0);
-            spoke.rotation.z = angle;
-            this._wheelGroup.add(spoke);
-        }
-
-        // Center hub with airbag cover
-        const hub = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.05, 0.05, 0.025, 12),
-            spokeMat
-        );
-        hub.rotation.x = Math.PI / 2;
-        this._wheelGroup.add(hub);
-
-        this.group.add(this._wheelGroup);
-    }
-
-    _buildWindshieldFrame() {
-        const frameMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
-
-        // Top bar
-        const topBar = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.08, 0.08), frameMat);
-        topBar.position.set(0, 0.7, -1.6);
-        this.group.add(topBar);
-
-        // Left A-pillar (driver side, closer)
-        const leftPillar = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.4, 0.06), frameMat);
-        leftPillar.position.set(-1.3, 0.1, -1.6);
-        leftPillar.rotation.z = 0.15;
-        this.group.add(leftPillar);
-
-        // Right A-pillar (passenger side, further)
-        const rightPillar = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.4, 0.06), frameMat);
-        rightPillar.position.set(1.3, 0.1, -1.6);
-        rightPillar.rotation.z = -0.15;
-        this.group.add(rightPillar);
-
-        // Rearview mirror (slightly left of center for LHD)
-        const mirror = new THREE.Mesh(
-            new THREE.BoxGeometry(0.25, 0.06, 0.03),
-            new THREE.MeshBasicMaterial({ color: 0x335577 })
-        );
-        mirror.position.set(-0.05, 0.55, -1.55);
-        this.group.add(mirror);
-
-        const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.18, 4), frameMat);
-        stalk.position.set(-0.05, 0.63, -1.56);
-        this.group.add(stalk);
-    }
-
-    _buildDoorPanel() {
-        // Left door panel (driver's door, visible on the left edge)
-        const doorMat = new THREE.MeshLambertMaterial({ color: 0x161616 });
-
-        const doorPanel = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.6, 1.2), doorMat);
-        doorPanel.position.set(-1.15, -0.3, -0.9);
-        this.group.add(doorPanel);
-
-        // Door armrest
-        const armrest = new THREE.Mesh(
-            new THREE.BoxGeometry(0.12, 0.05, 0.35),
-            new THREE.MeshLambertMaterial({ color: 0x1a1a1a })
-        );
-        armrest.position.set(-1.1, -0.35, -0.8);
-        this.group.add(armrest);
-
-        // Window switch panel
-        const switchPanel = new THREE.Mesh(
-            new THREE.BoxGeometry(0.06, 0.02, 0.12),
-            new THREE.MeshLambertMaterial({ color: 0x222222 })
-        );
-        switchPanel.position.set(-1.08, -0.32, -0.8);
-        this.group.add(switchPanel);
-
-        // Side mirror visible through left window (approximation)
-        const sideMirror = new THREE.Mesh(
-            new THREE.BoxGeometry(0.15, 0.1, 0.02),
-            new THREE.MeshBasicMaterial({ color: 0x334466 })
-        );
-        sideMirror.position.set(-1.35, 0.1, -1.3);
-        sideMirror.rotation.y = 0.3;
-        this.group.add(sideMirror);
-    }
+    // ── Headlights ───────────────────────────────────────────
 
     _buildHeadlights() {
         this._headlightL = new THREE.SpotLight(0xffffcc, 30, 120, Math.PI / 6, 0.5, 1);
@@ -243,46 +209,37 @@ export class Cockpit {
         this.group.add(this._headlightR.target);
     }
 
-    _buildInteriorLighting() {
-        // Overhead dome light — illuminates the cockpit so it's visible
-        const domeLight = new THREE.PointLight(0xddeeff, 0.6, 4, 1.5);
-        domeLight.position.set(0, 0.5, -1.0);
-        this.group.add(domeLight);
-
-        // Instrument cluster backlight (green-ish glow)
-        const clusterLight = new THREE.PointLight(0x44ff88, 0.3, 1.5, 2);
-        clusterLight.position.set(DRIVER_X, -0.3, -1.2);
-        this.group.add(clusterLight);
-
-        // Subtle center console glow
-        const consoleLight = new THREE.PointLight(0x4488ff, 0.15, 1.0, 2);
-        consoleLight.position.set(0.15, -0.3, -1.2);
-        this.group.add(consoleLight);
-    }
-
-    /**
-     * Set headlight intensity (called by day/night system).
-     */
     setHeadlightIntensity(intensity) {
         this._headlightL.intensity = intensity;
         this._headlightR.intensity = intensity;
     }
 
-    update(dt, vehicle) {
-        this.wheelTargetAngle = -vehicle.steerAngle * 2.5;
-        this.wheelCurrentAngle = lerp(this.wheelCurrentAngle, this.wheelTargetAngle, 12 * dt);
-        this._wheelGroup.rotation.z = this.wheelCurrentAngle;
+    // ── Per-Frame Update ─────────────────────────────────────
 
-        const speedRatio = vehicle.speedKmh / 180;
-        if (speedRatio < 0.5) {
-            this._speedIndicator.material.color.setHex(0x00ff00);
-        } else if (speedRatio < 0.8) {
-            this._speedIndicator.material.color.setHex(0xffff00);
-        } else {
-            this._speedIndicator.material.color.setHex(0xff0000);
+    update(dt, vehicle) {
+        // Sway — same parallax for dash and wheel so they track together
+        const swayTarget = vehicle.steerAngle * SWAY_AMOUNT;
+        this.swayX = lerp(this.swayX, swayTarget, SWAY_SPEED * dt);
+
+        const sway = this.swayX * COCKPIT_PARALLAX;
+
+        if (this.dashMesh) {
+            this.dashMesh.position.x = this._dashBaseX + sway;
+        }
+
+        if (this.underDashMesh) {
+            this.underDashMesh.position.x = this._dashBaseX + sway;
+        }
+
+        if (this.wheelMesh) {
+            this.wheelMesh.position.x = this._wheelBaseX + sway;
+
+            const wheelTarget = -vehicle.steerAngle * 2.5;
+            this.wheelCurrentAngle = lerp(this.wheelCurrentAngle, wheelTarget, 12 * dt);
+            this.wheelMesh.rotation.z = this.wheelCurrentAngle;
         }
     }
 }
 
-// Export driver offset for camera positioning
+// Export driver offset for camera positioning in main.js
 export const DRIVER_OFFSET_X = DRIVER_X;
