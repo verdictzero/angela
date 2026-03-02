@@ -275,13 +275,13 @@ body {
     z-index: 40;
     pointer-events: none;
     opacity: 0;
-    background: radial-gradient(ellipse at center, transparent 40%, rgba(180, 0, 0, 0.6) 100%);
-    transition: opacity 0.1s ease-in;
+    background: radial-gradient(ellipse at center, rgba(120, 0, 0, 0.25) 20%, rgba(200, 0, 0, 0.8) 100%);
+    transition: opacity 0.15s ease-out;
 }
 
 #blood-overlay.active {
     opacity: 1;
-    transition: opacity 0.05s ease-in;
+    transition: opacity 0.03s ease-in;
 }
 
 /* Touch Controls */
