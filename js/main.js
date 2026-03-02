@@ -176,6 +176,7 @@ window.addEventListener('orientationchange', onResize);
 // ── Game Loop ─────────────────────────────────────────────────
 
 let prevTime = performance.now();
+let timeScale = 1.0;
 let sceneStatsCache = { objects: 0, materials: 0, lights: 0 };
 let sceneStatsFrame = 0;
 
@@ -186,6 +187,7 @@ function gameLoop() {
     let dt = (now - prevTime) / 1000;
     prevTime = now;
     dt = Math.min(dt, 0.1);
+    dt *= timeScale;
 
     // Day/night cycle (always runs, even on start screen)
     const intensity = dayNight.update(dt, ambient, dirLight, hemiLight, fog, scene);
@@ -328,6 +330,15 @@ function updateCamera(dt) {
         vehicle.position.z + forward.z * 20 + right.z * DRIVER_OFFSET_X
     );
     camera.lookAt(lookTarget);
+}
+
+// ── Slow Mo Toggle ────────────────────────────────────────────
+const btnSlowmo = document.getElementById('btn-slowmo');
+if (btnSlowmo) {
+    btnSlowmo.addEventListener('click', () => {
+        timeScale = timeScale < 1.0 ? 1.0 : 0.3;
+        btnSlowmo.classList.toggle('active', timeScale < 1.0);
+    });
 }
 
 // ── Initialize ────────────────────────────────────────────────
