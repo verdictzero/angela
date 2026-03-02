@@ -71,16 +71,26 @@ export class GoreSystem {
             emissiveBoost: 0.35
         });
 
-        this._chunkMat = createUnlitColorMaterial(0xdd2200, {
+        // Gore sprite sheet texture (4x4 grid, 256px cells)
+        const goreSpriteSheet = new THREE.TextureLoader().load(
+            'assets/gore_sprite_ sheet_4x4_256pxCells.png'
+        );
+        goreSpriteSheet.magFilter = THREE.NearestFilter;
+        goreSpriteSheet.minFilter = THREE.NearestFilter;
+        goreSpriteSheet.colorSpace = THREE.SRGBColorSpace;
+
+        this._chunkMat = createUnlitMaterial(goreSpriteSheet, {
             transparent: true, side: THREE.DoubleSide,
             billboard: true, depthWrite: false,
-            emissiveBoost: 0.35
+            emissiveBoost: 0.35, alphaTest: 0.3,
+            spriteSheet: true,
         });
 
-        this._subChunkMat = createUnlitColorMaterial(0xee1500, {
+        this._subChunkMat = createUnlitMaterial(goreSpriteSheet, {
             transparent: true, side: THREE.DoubleSide,
             billboard: true, depthWrite: false,
-            emissiveBoost: 0.35
+            emissiveBoost: 0.35, alphaTest: 0.3,
+            spriteSheet: true,
         });
 
         this._cloudMat = createUnlitColorMaterial(0xff0000, {
@@ -104,8 +114,18 @@ export class GoreSystem {
 
         // ── InstancedMeshes ──────────────────────────────────
         this._particleMesh = this._createIM(quadGeo, this._goreMat, MAX_PARTICLES);
-        this._chunkMesh = this._createIM(quadGeo, this._chunkMat, MAX_CHUNKS);
-        this._subChunkMesh = this._createIM(quadGeo, this._subChunkMat, MAX_SUB_CHUNKS);
+
+        // Chunks and sub-chunks get cloned geometry for per-instance spriteIndex
+        const chunkGeo = quadGeo.clone();
+        chunkGeo.setAttribute('spriteIndex',
+            new THREE.InstancedBufferAttribute(new Float32Array(MAX_CHUNKS), 1));
+        this._chunkMesh = this._createIM(chunkGeo, this._chunkMat, MAX_CHUNKS);
+
+        const subChunkGeo = quadGeo.clone();
+        subChunkGeo.setAttribute('spriteIndex',
+            new THREE.InstancedBufferAttribute(new Float32Array(MAX_SUB_CHUNKS), 1));
+        this._subChunkMesh = this._createIM(subChunkGeo, this._subChunkMat, MAX_SUB_CHUNKS);
+
         this._cloudMesh = this._createIM(quadGeo, this._cloudMat, MAX_CLOUDS);
         this._decalMesh = this._createIM(groundQuadGeo, this._decalMat, MAX_DECALS);
 
@@ -136,6 +156,7 @@ export class GoreSystem {
                 age: 0, lifetime: 0, size: 0,
                 grounded: false,
                 decalSpawned: false,
+                spriteIndex: 0,
             };
         }
         return pool;
@@ -150,6 +171,7 @@ export class GoreSystem {
                 velocity: new THREE.Vector3(),
                 age: 0, lifetime: 0, size: 0,
                 grounded: false, hittable: false,
+                spriteIndex: 0,
             };
         }
         return pool;
@@ -263,6 +285,7 @@ export class GoreSystem {
             c.age = 0;
             c.grounded = false;
             c.hittable = false;
+            c.spriteIndex = Math.floor(Math.random() * 16);
             c.active = true;
         }
 
@@ -319,6 +342,7 @@ export class GoreSystem {
             s.age = 0;
             s.grounded = false;
             s.decalSpawned = false;
+            s.spriteIndex = Math.floor(Math.random() * 16);
             s.active = true;
         }
     }
@@ -360,6 +384,8 @@ export class GoreSystem {
 
     _updatePhysicsPool(pool, mesh, dt, max, spawnDecalOnGround) {
         let writeIdx = 0;
+        const spriteAttr = mesh.geometry.getAttribute('spriteIndex');
+
         for (let i = 0; i < max; i++) {
             const p = pool[i];
             if (!p.active) continue;
@@ -399,10 +425,14 @@ export class GoreSystem {
             _scale.set(s, s, s);
             _matrix.compose(p.position, _identityQuat, _scale);
             mesh.setMatrixAt(writeIdx, _matrix);
+            if (spriteAttr) spriteAttr.setX(writeIdx, p.spriteIndex);
             writeIdx++;
         }
         mesh.count = writeIdx;
-        if (writeIdx > 0) mesh.instanceMatrix.needsUpdate = true;
+        if (writeIdx > 0) {
+            mesh.instanceMatrix.needsUpdate = true;
+            if (spriteAttr) spriteAttr.needsUpdate = true;
+        }
     }
 
     _updateSubChunks(dt) {
@@ -412,6 +442,7 @@ export class GoreSystem {
     _updateChunks(dt, vehiclePos, vehicleAngle, vehicleSpeed) {
         let writeIdx = 0;
         let chunkHitCount = 0;
+        const spriteAttr = this._chunkMesh.geometry.getAttribute('spriteIndex');
 
         // Pre-compute vehicle check position
         const canCheck = Math.abs(vehicleSpeed) > 3;
@@ -476,10 +507,14 @@ export class GoreSystem {
             _scale.set(s, s, s);
             _matrix.compose(c.position, _identityQuat, _scale);
             this._chunkMesh.setMatrixAt(writeIdx, _matrix);
+            spriteAttr.setX(writeIdx, c.spriteIndex);
             writeIdx++;
         }
         this._chunkMesh.count = writeIdx;
-        if (writeIdx > 0) this._chunkMesh.instanceMatrix.needsUpdate = true;
+        if (writeIdx > 0) {
+            this._chunkMesh.instanceMatrix.needsUpdate = true;
+            spriteAttr.needsUpdate = true;
+        }
 
         return chunkHitCount;
     }

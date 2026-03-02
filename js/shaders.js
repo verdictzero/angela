@@ -36,8 +36,20 @@ varying vec3 vWorldPos;
 uniform float billboardRotY;
 #endif
 
+#ifdef SPRITE_SHEET
+attribute float spriteIndex;
+uniform float spriteSheetSize;
+#endif
+
 void main() {
     vUv = uv;
+
+    #ifdef SPRITE_SHEET
+    float idx = spriteIndex;
+    float col = mod(idx, spriteSheetSize);
+    float row = floor(idx / spriteSheetSize);
+    vUv = uv / spriteSheetSize + vec2(col, spriteSheetSize - 1.0 - row) / spriteSheetSize;
+    #endif
 
     vec3 pos = position;
 
@@ -121,6 +133,8 @@ void main() {
  * @param {number} options.opacity - Overall opacity multiplier
  * @param {boolean} options.depthWrite - Write to depth buffer
  * @param {boolean} options.billboard - Enable shader-based Y-axis billboard (for InstancedMesh)
+ * @param {boolean} options.spriteSheet - Enable sprite sheet UV remapping via per-instance spriteIndex attribute
+ * @param {number} options.spriteSheetSize - Grid size of sprite sheet (default 4 for 4x4)
  */
 export function createUnlitMaterial(texture, options = {}) {
     const {
@@ -130,6 +144,8 @@ export function createUnlitMaterial(texture, options = {}) {
         opacity = 1.0,
         depthWrite = true,
         billboard = false,
+        spriteSheet = false,
+        spriteSheetSize = 4.0,
     } = options;
 
     const emissiveBoost = options.emissiveBoost || 0.0;
@@ -154,6 +170,11 @@ export function createUnlitMaterial(texture, options = {}) {
     if (billboard) {
         defines.BILLBOARD_Y = '';
         uniforms.billboardRotY = { value: 0.0 };
+    }
+
+    if (spriteSheet) {
+        defines.SPRITE_SHEET = '';
+        uniforms.spriteSheetSize = { value: spriteSheetSize };
     }
 
     return new THREE.ShaderMaterial({
