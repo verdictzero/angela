@@ -36,11 +36,6 @@ varying vec3 vWorldPos;
 uniform float billboardRotY;
 #endif
 
-#ifdef USE_INSTANCING_COLOR
-attribute vec3 instanceColor;
-varying vec3 vInstanceColor;
-#endif
-
 void main() {
     vUv = uv;
 
@@ -63,10 +58,6 @@ void main() {
     vec4 mvPosition = viewMatrix * worldPos;
     vViewDepth = -mvPosition.z;
     gl_Position = projectionMatrix * mvPosition;
-
-    #ifdef USE_INSTANCING_COLOR
-    vInstanceColor = instanceColor;
-    #endif
 }
 `;
 
@@ -89,16 +80,8 @@ varying vec2 vUv;
 varying float vViewDepth;
 varying vec3 vWorldPos;
 
-#ifdef USE_INSTANCING_COLOR
-varying vec3 vInstanceColor;
-#endif
-
 void main() {
     vec4 texColor = texture2D(albedoMap, vUv);
-
-    #ifdef USE_INSTANCING_COLOR
-    texColor.rgb *= vInstanceColor;
-    #endif
 
     if (texColor.a < alphaTest) discard;
 
@@ -171,10 +154,6 @@ export function createUnlitMaterial(texture, options = {}) {
     if (billboard) {
         defines.BILLBOARD_Y = '';
         uniforms.billboardRotY = { value: 0.0 };
-    }
-
-    if (options.useInstanceColor) {
-        defines.USE_INSTANCING_COLOR = '';
     }
 
     return new THREE.ShaderMaterial({
