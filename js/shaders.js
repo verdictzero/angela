@@ -74,6 +74,7 @@ uniform float opacity;
 uniform vec3 headlightPos;
 uniform vec3 headlightDir;
 uniform float headlightIntensity;
+uniform float emissiveBoost;
 
 varying vec2 vUv;
 varying float vViewDepth;
@@ -94,8 +95,9 @@ void main() {
     atten *= atten;
     vec3 headlight = vec3(1.0, 1.0, 0.8) * headlightIntensity * spotEffect * atten;
 
-    // Multiplicative tint + additive headlight
-    vec3 color = texColor.rgb * (ambientTint + headlight);
+    // Multiplicative tint + additive headlight (emissiveBoost sets minimum brightness floor)
+    vec3 lighting = ambientTint + headlight;
+    vec3 color = texColor.rgb * max(lighting, vec3(emissiveBoost));
 
     // Distance fog via smoothstep
     float fogFactor = smoothstep(fogStart, fogEnd, vViewDepth);
@@ -130,10 +132,13 @@ export function createUnlitMaterial(texture, options = {}) {
         billboard = false,
     } = options;
 
+    const emissiveBoost = options.emissiveBoost || 0.0;
+
     const uniforms = {
         albedoMap:   { value: texture },
         alphaTest:   { value: alphaTest },
         opacity:     { value: opacity },
+        emissiveBoost: { value: emissiveBoost },
         // Shared — mutating .value on these updates all materials
         ambientTint:        unlitUniforms.ambientTint,
         fogColor:           unlitUniforms.fogColor,

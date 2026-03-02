@@ -14,39 +14,39 @@ import { createUnlitColorMaterial, createUnlitMaterial } from './shaders.js';
 import { randomRange, createCanvasTexture } from './utils.js';
 
 // ── Particles (small red squares) ────────────────────────────
-const MAX_PARTICLES = 800;
-const PARTICLES_PER_HIT = 30;
-const PARTICLE_LIFETIME = 2.5;
+const MAX_PARTICLES = 1500;
+const PARTICLES_PER_HIT = 60;
+const PARTICLE_LIFETIME = 3.5;
 const PARTICLE_SIZE_MIN = 0.12;
-const PARTICLE_SIZE_MAX = 0.4;
+const PARTICLE_SIZE_MAX = 0.6;
 
 // ── Big Chunks (hittable, launched forward) ──────────────────
-const MAX_CHUNKS = 100;
-const CHUNKS_PER_HIT = 5;
-const CHUNK_LIFETIME = 6.0;
-const CHUNK_SIZE_MIN = 0.6;
-const CHUNK_SIZE_MAX = 1.2;
-const CHUNK_HIT_RADIUS = 1.5;
+const MAX_CHUNKS = 200;
+const CHUNKS_PER_HIT = 12;
+const CHUNK_LIFETIME = 8.0;
+const CHUNK_SIZE_MIN = 0.7;
+const CHUNK_SIZE_MAX = 1.8;
+const CHUNK_HIT_RADIUS = 2.0;
 
 // ── Sub-Chunks (from chunk explosions) ───────────────────────
-const MAX_SUB_CHUNKS = 300;
-const SUB_CHUNKS_PER_HIT = 8;
-const SUB_CHUNK_LIFETIME = 4.0;
-const SUB_CHUNK_SIZE_MIN = 0.15;
-const SUB_CHUNK_SIZE_MAX = 0.4;
+const MAX_SUB_CHUNKS = 600;
+const SUB_CHUNKS_PER_HIT = 16;
+const SUB_CHUNK_LIFETIME = 5.0;
+const SUB_CHUNK_SIZE_MIN = 0.2;
+const SUB_CHUNK_SIZE_MAX = 0.6;
 
 // ── Blood Clouds (evaporation puffs) ─────────────────────────
-const MAX_CLOUDS = 50;
-const CLOUDS_PER_HIT = 3;
-const CLOUD_LIFETIME = 0.6;
-const CLOUD_SIZE = 3.0;
+const MAX_CLOUDS = 100;
+const CLOUDS_PER_HIT = 6;
+const CLOUD_LIFETIME = 1.0;
+const CLOUD_SIZE = 5.0;
 
 // ── Blood Decals ─────────────────────────────────────────────
-const MAX_DECALS = 150;
-const DECAL_LIFETIME = 10.0;
+const MAX_DECALS = 250;
+const DECAL_LIFETIME = 15.0;
 
 // ── Physics ──────────────────────────────────────────────────
-const GRAVITY = -18;
+const GRAVITY = -15;
 
 // Reusable math objects
 const _matrix = new THREE.Matrix4();
@@ -64,31 +64,36 @@ export class GoreSystem {
         // Blood overlay element
         this._bloodOverlay = document.getElementById('blood-overlay');
 
-        // ── Materials ────────────────────────────────────────
-        this._goreMat = createUnlitColorMaterial(0xcc0000, {
+        // ── Materials (bright arterial colors + emissive for night visibility) ──
+        this._goreMat = createUnlitColorMaterial(0xff1100, {
             transparent: true, side: THREE.DoubleSide,
-            billboard: true, depthWrite: false
+            billboard: true, depthWrite: false,
+            emissiveBoost: 0.35
         });
 
-        this._chunkMat = createUnlitColorMaterial(0xaa0000, {
+        this._chunkMat = createUnlitColorMaterial(0xdd2200, {
             transparent: true, side: THREE.DoubleSide,
-            billboard: true, depthWrite: false
+            billboard: true, depthWrite: false,
+            emissiveBoost: 0.35
         });
 
-        this._subChunkMat = createUnlitColorMaterial(0xbb0000, {
+        this._subChunkMat = createUnlitColorMaterial(0xee1500, {
             transparent: true, side: THREE.DoubleSide,
-            billboard: true, depthWrite: false
+            billboard: true, depthWrite: false,
+            emissiveBoost: 0.35
         });
 
-        this._cloudMat = createUnlitColorMaterial(0xcc0000, {
+        this._cloudMat = createUnlitColorMaterial(0xff0000, {
             transparent: true, side: THREE.DoubleSide,
-            billboard: true, depthWrite: false, opacity: 0.5
+            billboard: true, depthWrite: false, opacity: 0.6,
+            emissiveBoost: 0.35
         });
 
         this._decalTex = this._generateDecalTexture();
         this._decalMat = createUnlitMaterial(this._decalTex, {
             transparent: true, depthWrite: false,
-            side: THREE.DoubleSide
+            side: THREE.DoubleSide,
+            emissiveBoost: 0.25
         });
 
         // ── Geometries ───────────────────────────────────────
@@ -116,6 +121,7 @@ export class GoreSystem {
         const mesh = new THREE.InstancedMesh(geo, mat, count);
         mesh.count = 0;
         mesh.frustumCulled = false;
+        mesh.renderOrder = 1; // render after opaque world geometry for correct alpha compositing
         this.scene.add(mesh);
         return mesh;
     }
@@ -219,18 +225,18 @@ export class GoreSystem {
      * Spawn gore explosion at NPC hit position.
      */
     spawn(position, impactVelocity) {
-        // 1. Gore particles (small red squares)
+        // 1. Gore particles (small red squares — wide spray)
         for (let i = 0; i < PARTICLES_PER_HIT; i++) {
             const p = this._acquire(this._particles);
             p.position.set(
-                position.x + randomRange(-0.5, 0.5),
-                position.y + randomRange(0.3, 1.8),
-                position.z + randomRange(-0.5, 0.5)
+                position.x + randomRange(-1.0, 1.0),
+                position.y + randomRange(0.3, 2.2),
+                position.z + randomRange(-1.0, 1.0)
             );
             p.velocity.set(
-                impactVelocity.x * randomRange(0.2, 0.8) + randomRange(-5, 5),
-                randomRange(3, 12),
-                impactVelocity.z * randomRange(0.2, 0.8) + randomRange(-5, 5)
+                impactVelocity.x * randomRange(0.5, 2.0) + randomRange(-8, 8),
+                randomRange(5, 18),
+                impactVelocity.z * randomRange(0.5, 2.0) + randomRange(-8, 8)
             );
             p.size = randomRange(PARTICLE_SIZE_MIN, PARTICLE_SIZE_MAX);
             p.lifetime = PARTICLE_LIFETIME * randomRange(0.5, 1.0);
@@ -239,18 +245,18 @@ export class GoreSystem {
             p.active = true;
         }
 
-        // 2. Big gore chunks (launched ahead of car)
+        // 2. Big gore chunks (launched FAR ahead of car)
         for (let i = 0; i < CHUNKS_PER_HIT; i++) {
             const c = this._acquire(this._chunks);
             c.position.set(
-                position.x + randomRange(-0.3, 0.3),
+                position.x + randomRange(-0.8, 0.8),
                 position.y + randomRange(0.5, 1.5),
-                position.z + randomRange(-0.3, 0.3)
+                position.z + randomRange(-0.8, 0.8)
             );
             c.velocity.set(
-                impactVelocity.x * randomRange(1.0, 2.0) + randomRange(-3, 3),
-                randomRange(4, 9),
-                impactVelocity.z * randomRange(1.0, 2.0) + randomRange(-3, 3)
+                impactVelocity.x * randomRange(2.5, 5.0) + randomRange(-6, 6),
+                randomRange(6, 18),
+                impactVelocity.z * randomRange(2.5, 5.0) + randomRange(-6, 6)
             );
             c.size = randomRange(CHUNK_SIZE_MIN, CHUNK_SIZE_MAX);
             c.lifetime = CHUNK_LIFETIME;
@@ -265,8 +271,9 @@ export class GoreSystem {
             this._spawnCloud(position);
         }
 
-        // 4. Ground decal at impact
+        // 4. Ground decals at impact (two for extra carnage)
         this._spawnDecal(position);
+        this._spawnDecal({ x: position.x + randomRange(-1.5, 1.5), z: position.z + randomRange(-1.5, 1.5) });
 
         // 5. Screen blood flash
         this._flashBlood();
@@ -288,7 +295,7 @@ export class GoreSystem {
         const d = this._acquire(this._decals);
         d.position.set(position.x, 0.02, position.z);
         d.rotation = Math.random() * Math.PI * 2;
-        d.size = randomRange(1.5, 4.0);
+        d.size = randomRange(2.5, 6.0);
         d.lifetime = DECAL_LIFETIME * randomRange(0.7, 1.0);
         d.age = 0;
         d.active = true;
@@ -303,9 +310,9 @@ export class GoreSystem {
                 position.z + randomRange(-0.3, 0.3)
             );
             s.velocity.set(
-                forward.x * vehicleSpeed * randomRange(0.1, 0.5) + randomRange(-4, 4),
-                randomRange(2, 7),
-                forward.z * vehicleSpeed * randomRange(0.1, 0.5) + randomRange(-4, 4)
+                forward.x * vehicleSpeed * randomRange(0.3, 1.2) + randomRange(-8, 8),
+                randomRange(4, 14),
+                forward.z * vehicleSpeed * randomRange(0.3, 1.2) + randomRange(-8, 8)
             );
             s.size = randomRange(SUB_CHUNK_SIZE_MIN, SUB_CHUNK_SIZE_MAX);
             s.lifetime = SUB_CHUNK_LIFETIME * randomRange(0.6, 1.0);
@@ -322,7 +329,7 @@ export class GoreSystem {
             clearTimeout(this._bloodTimeout);
             this._bloodTimeout = setTimeout(() => {
                 this._bloodOverlay.classList.remove('active');
-            }, 200);
+            }, 350);
         }
     }
 
@@ -375,6 +382,7 @@ export class GoreSystem {
                     p.lifetime = Math.min(p.lifetime, p.age + randomRange(0.3, 1.0));
                     if (spawnDecalOnGround && !p.decalSpawned) {
                         this._spawnDecal(p.position);
+                        this._spawnCloud(p.position); // blood puff on ground impact
                         p.decalSpawned = true;
                     }
                 }
