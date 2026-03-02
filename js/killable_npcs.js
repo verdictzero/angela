@@ -13,7 +13,7 @@ import { randomRange } from './utils.js';
 
 const HIT_RADIUS = 2.5;             // hit detection radius
 const HIT_FORWARD = 4;              // how far in front of car to check
-const MAX_NPCS = 600;
+const MAX_NPCS = 120;
 const DESPAWN_BEHIND = 80;           // despawn if this far behind player
 const MOPED_SPEED_MIN = 5;          // m/s (~18 km/h)
 const MOPED_SPEED_MAX = 12;         // m/s (~43 km/h)

@@ -247,8 +247,11 @@ function gameLoop() {
     // Update foliage (distance culling + billboards)
     foliage.update(camera);
 
-    // Update gore particles
-    gore.update(dt, camera);
+    // Update gore particles + chunk hit detection
+    const chunkHits = gore.update(dt, camera, vehicle.position, vehicle.angle, vehicle.speed);
+    for (let i = 0; i < chunkHits; i++) {
+        vehicle.applyImpact(0.05);
+    }
 
     // Update cockpit
     cockpit.update(dt, vehicle);
