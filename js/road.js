@@ -459,36 +459,18 @@ export class RoadManager {
 
     _spawnPositionsForChunk(chunk) {
         const positions = [];
-        for (let i = chunk.startIdx + 2; i < chunk.endIdx - 2; i += 3) {
+        for (let i = chunk.startIdx + 2; i < chunk.endIdx - 2; i += 15) {
             const pt = this.points[i];
-            // Spawn multiple mopeds across the road width
-            const laneCount = 2 + Math.floor(Math.random() * 2); // 2-3 per row
-            for (let l = 0; l < laneCount; l++) {
-                const roadLat = randomRange(-ROAD_HALF_WIDTH + 1.5, ROAD_HALF_WIDTH - 1.5);
-                positions.push({
-                    position: new THREE.Vector3(
-                        pt.position.x + pt.right.x * roadLat, 0,
-                        pt.position.z + pt.right.z * roadLat
-                    ),
-                    forward: pt.forward.clone(),
-                    lateralOffset: roadLat,
-                    roadIndex: i, type: 'road'
-                });
-            }
-            // On sidewalk occasionally
-            if (Math.random() > 0.5) {
-                const side = Math.random() > 0.5 ? 1 : -1;
-                const swLat = side * (SW_INNER + randomRange(0.4, SIDEWALK_WIDTH - 0.4));
-                positions.push({
-                    position: new THREE.Vector3(
-                        pt.position.x + pt.right.x * swLat, CURB_HEIGHT,
-                        pt.position.z + pt.right.z * swLat
-                    ),
-                    forward: pt.forward.clone(),
-                    lateralOffset: swLat,
-                    roadIndex: i, type: 'sidewalk'
-                });
-            }
+            const roadLat = randomRange(-ROAD_HALF_WIDTH + 1.5, ROAD_HALF_WIDTH - 1.5);
+            positions.push({
+                position: new THREE.Vector3(
+                    pt.position.x + pt.right.x * roadLat, 0,
+                    pt.position.z + pt.right.z * roadLat
+                ),
+                forward: pt.forward.clone(),
+                lateralOffset: roadLat,
+                roadIndex: i, type: 'road'
+            });
         }
         return positions;
     }

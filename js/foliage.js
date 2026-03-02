@@ -21,28 +21,28 @@ const TIERS = [
         textures: ['fern_1.png', 'fern_2.png', 'fern_3.png', 'fern_4.png'],
         baseWidth: 1.2, baseHeight: 0.8,
         clusterSize: 3,
-        countPerCell: 32,
+        countPerCell: 24,
     },
     {
         name: 'bush',
         textures: ['forest_bush_1.png', 'forest_bush_2.png', 'forest_bush_3.png'],
         baseWidth: 3, baseHeight: 2.5,
         clusterSize: 2,
-        countPerCell: 24,
+        countPerCell: 18,
     },
     {
         name: 'juvenile',
         textures: ['juvenile_fir_tree_1.png', 'juvenile_fir_tree_2.png', 'juvenile_fir_tree_4.png'],
         baseWidth: 4, baseHeight: 6,
         clusterSize: 2,
-        countPerCell: 16,
+        countPerCell: 12,
     },
     {
         name: 'fir',
         textures: ['fir_tree_1.png', 'fir_tree_2.png', 'fir_tree_3.png', 'fir_tree_4.png'],
-        baseWidth: 5, baseHeight: 10,
+        baseWidth: 10, baseHeight: 20,
         clusterSize: 1,
-        countPerCell: 12,
+        countPerCell: 9,
     },
 ];
 

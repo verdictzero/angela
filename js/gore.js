@@ -1,91 +1,182 @@
 /**
- * Gore Particle System
+ * Gore System — Instanced Red Billboard Squares
  *
- * Handles blood/gore explosions when monsters are hit.
- * Uses a particle pool for performance.
+ * 5 subsystems, each backed by its own InstancedMesh:
+ *   1. Gore Particles  — small red squares burst from NPC hits
+ *   2. Big Gore Chunks  — large red squares launched ahead of car, hittable
+ *   3. Sub-Gore Chunks  — tiny red squares from chunk re-hits
+ *   4. Blood Clouds     — quick-fading red evaporation puffs
+ *   5. Blood Decals     — ground splatter marks
  */
 
 import * as THREE from 'three';
+import { createUnlitColorMaterial, createUnlitMaterial } from './shaders.js';
 import { randomRange, createCanvasTexture } from './utils.js';
 
-const _camDir = new THREE.Vector3();
+// ── Particles (small red squares) ────────────────────────────
+const MAX_PARTICLES = 800;
+const PARTICLES_PER_HIT = 30;
+const PARTICLE_LIFETIME = 2.5;
+const PARTICLE_SIZE_MIN = 0.12;
+const PARTICLE_SIZE_MAX = 0.4;
 
-const MAX_PARTICLES = 500;
-const PARTICLES_PER_HIT = 20;
-const PARTICLE_LIFETIME = 2.0;
-const GRAVITY = -15;
-const DECAL_LIFETIME = 8.0;
-const MAX_DECALS = 60;
+// ── Big Chunks (hittable, launched forward) ──────────────────
+const MAX_CHUNKS = 100;
+const CHUNKS_PER_HIT = 5;
+const CHUNK_LIFETIME = 6.0;
+const CHUNK_SIZE_MIN = 0.6;
+const CHUNK_SIZE_MAX = 1.2;
+const CHUNK_HIT_RADIUS = 1.5;
+
+// ── Sub-Chunks (from chunk explosions) ───────────────────────
+const MAX_SUB_CHUNKS = 300;
+const SUB_CHUNKS_PER_HIT = 8;
+const SUB_CHUNK_LIFETIME = 4.0;
+const SUB_CHUNK_SIZE_MIN = 0.15;
+const SUB_CHUNK_SIZE_MAX = 0.4;
+
+// ── Blood Clouds (evaporation puffs) ─────────────────────────
+const MAX_CLOUDS = 50;
+const CLOUDS_PER_HIT = 3;
+const CLOUD_LIFETIME = 0.6;
+const CLOUD_SIZE = 3.0;
+
+// ── Blood Decals ─────────────────────────────────────────────
+const MAX_DECALS = 150;
+const DECAL_LIFETIME = 10.0;
+
+// ── Physics ──────────────────────────────────────────────────
+const GRAVITY = -18;
+
+// Reusable math objects
+const _matrix = new THREE.Matrix4();
+const _identityQuat = new THREE.Quaternion();
+const _scale = new THREE.Vector3();
+const _camDir = new THREE.Vector3();
+const _yAxis = new THREE.Vector3(0, 1, 0);
+const _rotQuat = new THREE.Quaternion();
+const _zeroMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
 
 export class GoreSystem {
     constructor(scene) {
         this.scene = scene;
-        this.particles = [];
-        this.decals = [];
 
         // Blood overlay element
         this._bloodOverlay = document.getElementById('blood-overlay');
 
-        // Generate gore textures
-        this._goreTextures = this._generateTextures();
-        this._decalTexture = this._generateDecalTexture();
-
-        // Shared materials
-        this._particleMaterials = this._goreTextures.map(tex =>
-            new THREE.MeshBasicMaterial({
-                map: tex, transparent: true, alphaTest: 0.05,
-                side: THREE.DoubleSide, depthWrite: false
-            })
-        );
-
-        this._decalMaterial = new THREE.MeshBasicMaterial({
-            map: this._decalTexture, transparent: true,
-            side: THREE.DoubleSide, depthWrite: false
+        // ── Materials ────────────────────────────────────────
+        this._goreMat = createUnlitColorMaterial(0xcc0000, {
+            transparent: true, side: THREE.DoubleSide,
+            billboard: true, depthWrite: false
         });
+
+        this._chunkMat = createUnlitColorMaterial(0xaa0000, {
+            transparent: true, side: THREE.DoubleSide,
+            billboard: true, depthWrite: false
+        });
+
+        this._subChunkMat = createUnlitColorMaterial(0xbb0000, {
+            transparent: true, side: THREE.DoubleSide,
+            billboard: true, depthWrite: false
+        });
+
+        this._cloudMat = createUnlitColorMaterial(0xcc0000, {
+            transparent: true, side: THREE.DoubleSide,
+            billboard: true, depthWrite: false, opacity: 0.5
+        });
+
+        this._decalTex = this._generateDecalTexture();
+        this._decalMat = createUnlitMaterial(this._decalTex, {
+            transparent: true, depthWrite: false,
+            side: THREE.DoubleSide
+        });
+
+        // ── Geometries ───────────────────────────────────────
+        const quadGeo = new THREE.PlaneGeometry(1, 1);
+
+        const groundQuadGeo = new THREE.PlaneGeometry(1, 1);
+        groundQuadGeo.rotateX(-Math.PI / 2);
+
+        // ── InstancedMeshes ──────────────────────────────────
+        this._particleMesh = this._createIM(quadGeo, this._goreMat, MAX_PARTICLES);
+        this._chunkMesh = this._createIM(quadGeo, this._chunkMat, MAX_CHUNKS);
+        this._subChunkMesh = this._createIM(quadGeo, this._subChunkMat, MAX_SUB_CHUNKS);
+        this._cloudMesh = this._createIM(quadGeo, this._cloudMat, MAX_CLOUDS);
+        this._decalMesh = this._createIM(groundQuadGeo, this._decalMat, MAX_DECALS);
+
+        // ── State Pools ──────────────────────────────────────
+        this._particles = this._createPhysicsPool(MAX_PARTICLES);
+        this._chunks = this._createChunkPool(MAX_CHUNKS);
+        this._subChunks = this._createPhysicsPool(MAX_SUB_CHUNKS);
+        this._clouds = this._createCloudPool(MAX_CLOUDS);
+        this._decals = this._createDecalPool(MAX_DECALS);
     }
 
-    _generateTextures() {
-        const textures = [];
-        const colors = ['#cc0000', '#990000', '#770000', '#aa0000', '#880011'];
+    _createIM(geo, mat, count) {
+        const mesh = new THREE.InstancedMesh(geo, mat, count);
+        mesh.count = 0;
+        mesh.frustumCulled = false;
+        this.scene.add(mesh);
+        return mesh;
+    }
 
-        for (let i = 0; i < 5; i++) {
-            const canvas = createCanvasTexture(32, 32, (ctx, w, h) => {
-                ctx.clearRect(0, 0, w, h);
-                ctx.fillStyle = colors[i];
-                // Random blob shapes
-                ctx.beginPath();
-                const cx = w / 2, cy = h / 2;
-                const points = 5 + Math.floor(Math.random() * 4);
-                for (let j = 0; j < points; j++) {
-                    const angle = (j / points) * Math.PI * 2;
-                    const r = 8 + Math.random() * 6;
-                    const x = cx + Math.cos(angle) * r;
-                    const y = cy + Math.sin(angle) * r;
-                    if (j === 0) ctx.moveTo(x, y);
-                    else ctx.lineTo(x, y);
-                }
-                ctx.closePath();
-                ctx.fill();
-
-                // Darker center
-                ctx.fillStyle = '#440000';
-                ctx.beginPath();
-                ctx.arc(cx, cy, 3 + Math.random() * 3, 0, Math.PI * 2);
-                ctx.fill();
-            });
-
-            const tex = new THREE.CanvasTexture(canvas);
-            tex.magFilter = THREE.NearestFilter;
-            textures.push(tex);
+    _createPhysicsPool(max) {
+        const pool = new Array(max);
+        for (let i = 0; i < max; i++) {
+            pool[i] = {
+                active: false,
+                position: new THREE.Vector3(),
+                velocity: new THREE.Vector3(),
+                age: 0, lifetime: 0, size: 0,
+                grounded: false,
+                decalSpawned: false,
+            };
         }
+        return pool;
+    }
 
-        return textures;
+    _createChunkPool(max) {
+        const pool = new Array(max);
+        for (let i = 0; i < max; i++) {
+            pool[i] = {
+                active: false,
+                position: new THREE.Vector3(),
+                velocity: new THREE.Vector3(),
+                age: 0, lifetime: 0, size: 0,
+                grounded: false, hittable: false,
+            };
+        }
+        return pool;
+    }
+
+    _createCloudPool(max) {
+        const pool = new Array(max);
+        for (let i = 0; i < max; i++) {
+            pool[i] = {
+                active: false,
+                position: new THREE.Vector3(),
+                age: 0, lifetime: 0,
+            };
+        }
+        return pool;
+    }
+
+    _createDecalPool(max) {
+        const pool = new Array(max);
+        for (let i = 0; i < max; i++) {
+            pool[i] = {
+                active: false,
+                position: new THREE.Vector3(),
+                age: 0, lifetime: 0,
+                rotation: 0, size: 0,
+            };
+        }
+        return pool;
     }
 
     _generateDecalTexture() {
         const canvas = createCanvasTexture(64, 64, (ctx, w, h) => {
             ctx.clearRect(0, 0, w, h);
-            // Blood splatter
             const cx = w / 2, cy = h / 2;
             for (let i = 0; i < 8; i++) {
                 ctx.fillStyle = `rgba(${120 + Math.random() * 60}, 0, 0, ${0.3 + Math.random() * 0.4})`;
@@ -103,69 +194,126 @@ export class GoreSystem {
         return tex;
     }
 
+    // ── Acquire from pool (find inactive or recycle oldest) ──
+
+    _acquire(pool) {
+        // Find first inactive slot
+        for (let i = 0; i < pool.length; i++) {
+            if (!pool[i].active) return pool[i];
+        }
+        // Recycle oldest
+        let oldest = pool[0], maxAge = 0;
+        for (let i = 1; i < pool.length; i++) {
+            if (pool[i].age > maxAge) {
+                maxAge = pool[i].age;
+                oldest = pool[i];
+            }
+        }
+        oldest.active = false;
+        return oldest;
+    }
+
+    // ── Spawn Methods ────────────────────────────────────────
+
     /**
-     * Spawn a gore explosion at the given position.
+     * Spawn gore explosion at NPC hit position.
      */
     spawn(position, impactVelocity) {
+        // 1. Gore particles (small red squares)
         for (let i = 0; i < PARTICLES_PER_HIT; i++) {
-            if (this.particles.length >= MAX_PARTICLES) {
-                // Recycle oldest
-                const oldest = this.particles.shift();
-                this.scene.remove(oldest.mesh);
-                oldest.mesh.geometry.dispose();
-            }
-
-            const size = randomRange(0.15, 0.5);
-            const geo = new THREE.PlaneGeometry(size, size);
-            const matIdx = Math.floor(Math.random() * this._particleMaterials.length);
-            const mesh = new THREE.Mesh(geo, this._particleMaterials[matIdx]);
-
-            mesh.position.copy(position);
-            mesh.position.y += randomRange(0.3, 1.5);
-
-            const particle = {
-                mesh,
-                velocity: new THREE.Vector3(
-                    impactVelocity.x * randomRange(0.2, 0.8) + randomRange(-5, 5),
-                    randomRange(3, 10),
-                    impactVelocity.z * randomRange(0.2, 0.8) + randomRange(-5, 5)
-                ),
-                lifetime: PARTICLE_LIFETIME * randomRange(0.5, 1.0),
-                age: 0,
-                grounded: false
-            };
-
-            this.scene.add(mesh);
-            this.particles.push(particle);
+            const p = this._acquire(this._particles);
+            p.position.set(
+                position.x + randomRange(-0.5, 0.5),
+                position.y + randomRange(0.3, 1.8),
+                position.z + randomRange(-0.5, 0.5)
+            );
+            p.velocity.set(
+                impactVelocity.x * randomRange(0.2, 0.8) + randomRange(-5, 5),
+                randomRange(3, 12),
+                impactVelocity.z * randomRange(0.2, 0.8) + randomRange(-5, 5)
+            );
+            p.size = randomRange(PARTICLE_SIZE_MIN, PARTICLE_SIZE_MAX);
+            p.lifetime = PARTICLE_LIFETIME * randomRange(0.5, 1.0);
+            p.age = 0;
+            p.grounded = false;
+            p.active = true;
         }
 
-        // Spawn a ground decal
+        // 2. Big gore chunks (launched ahead of car)
+        for (let i = 0; i < CHUNKS_PER_HIT; i++) {
+            const c = this._acquire(this._chunks);
+            c.position.set(
+                position.x + randomRange(-0.3, 0.3),
+                position.y + randomRange(0.5, 1.5),
+                position.z + randomRange(-0.3, 0.3)
+            );
+            c.velocity.set(
+                impactVelocity.x * randomRange(1.0, 2.0) + randomRange(-3, 3),
+                randomRange(4, 9),
+                impactVelocity.z * randomRange(1.0, 2.0) + randomRange(-3, 3)
+            );
+            c.size = randomRange(CHUNK_SIZE_MIN, CHUNK_SIZE_MAX);
+            c.lifetime = CHUNK_LIFETIME;
+            c.age = 0;
+            c.grounded = false;
+            c.hittable = false;
+            c.active = true;
+        }
+
+        // 3. Blood evaporation clouds
+        for (let i = 0; i < CLOUDS_PER_HIT; i++) {
+            this._spawnCloud(position);
+        }
+
+        // 4. Ground decal at impact
         this._spawnDecal(position);
 
-        // Blood screen effect
+        // 5. Screen blood flash
         this._flashBlood();
     }
 
+    _spawnCloud(position) {
+        const c = this._acquire(this._clouds);
+        c.position.set(
+            position.x + randomRange(-0.5, 0.5),
+            position.y + randomRange(0.3, 1.2),
+            position.z + randomRange(-0.5, 0.5)
+        );
+        c.lifetime = CLOUD_LIFETIME * randomRange(0.8, 1.2);
+        c.age = 0;
+        c.active = true;
+    }
+
     _spawnDecal(position) {
-        if (this.decals.length >= MAX_DECALS) {
-            const oldest = this.decals.shift();
-            this.scene.remove(oldest.mesh);
-            oldest.mesh.geometry.dispose();
+        const d = this._acquire(this._decals);
+        d.position.set(position.x, 0.02, position.z);
+        d.rotation = Math.random() * Math.PI * 2;
+        d.size = randomRange(1.5, 4.0);
+        d.lifetime = DECAL_LIFETIME * randomRange(0.7, 1.0);
+        d.age = 0;
+        d.active = true;
+    }
+
+    _spawnSubChunks(position, forward, vehicleSpeed) {
+        for (let i = 0; i < SUB_CHUNKS_PER_HIT; i++) {
+            const s = this._acquire(this._subChunks);
+            s.position.set(
+                position.x + randomRange(-0.3, 0.3),
+                position.y + randomRange(0.1, 0.8),
+                position.z + randomRange(-0.3, 0.3)
+            );
+            s.velocity.set(
+                forward.x * vehicleSpeed * randomRange(0.1, 0.5) + randomRange(-4, 4),
+                randomRange(2, 7),
+                forward.z * vehicleSpeed * randomRange(0.1, 0.5) + randomRange(-4, 4)
+            );
+            s.size = randomRange(SUB_CHUNK_SIZE_MIN, SUB_CHUNK_SIZE_MAX);
+            s.lifetime = SUB_CHUNK_LIFETIME * randomRange(0.6, 1.0);
+            s.age = 0;
+            s.grounded = false;
+            s.decalSpawned = false;
+            s.active = true;
         }
-
-        const size = randomRange(1.5, 3.5);
-        const geo = new THREE.PlaneGeometry(size, size);
-        const mesh = new THREE.Mesh(geo, this._decalMaterial.clone());
-        mesh.rotation.x = -Math.PI / 2;
-        mesh.position.set(position.x, 0.02, position.z);
-        mesh.rotation.z = Math.random() * Math.PI * 2;
-
-        this.scene.add(mesh);
-        this.decals.push({
-            mesh,
-            lifetime: DECAL_LIFETIME,
-            age: 0
-        });
     }
 
     _flashBlood() {
@@ -178,72 +326,211 @@ export class GoreSystem {
         }
     }
 
-    /**
-     * Update all particles and decals.
-     */
-    update(dt, camera) {
-        // Update particles
-        for (let i = this.particles.length - 1; i >= 0; i--) {
-            const p = this.particles[i];
-            p.age += dt;
+    // ── Update ───────────────────────────────────────────────
 
+    /**
+     * Per-frame update. Also checks if vehicle hits any grounded chunks.
+     * Returns number of chunk hits (for optional impact feedback).
+     */
+    update(dt, camera, vehiclePos, vehicleAngle, vehicleSpeed) {
+        // Billboard rotation for all billboard materials
+        const dir = camera.getWorldDirection(_camDir);
+        const rotY = Math.atan2(dir.x, -dir.z);
+        this._goreMat.uniforms.billboardRotY.value = rotY;
+        this._chunkMat.uniforms.billboardRotY.value = rotY;
+        this._subChunkMat.uniforms.billboardRotY.value = rotY;
+        this._cloudMat.uniforms.billboardRotY.value = rotY;
+
+        // Update each subsystem
+        this._updatePhysicsPool(this._particles, this._particleMesh, dt, MAX_PARTICLES, false);
+        const chunkHits = this._updateChunks(dt, vehiclePos, vehicleAngle, vehicleSpeed);
+        this._updateSubChunks(dt);
+        this._updateClouds(dt);
+        this._updateDecals(dt);
+
+        return chunkHits;
+    }
+
+    _updatePhysicsPool(pool, mesh, dt, max, spawnDecalOnGround) {
+        let writeIdx = 0;
+        for (let i = 0; i < max; i++) {
+            const p = pool[i];
+            if (!p.active) continue;
+
+            p.age += dt;
             if (p.age >= p.lifetime) {
-                this.scene.remove(p.mesh);
-                p.mesh.geometry.dispose();
-                this.particles.splice(i, 1);
+                p.active = false;
                 continue;
             }
 
             if (!p.grounded) {
-                // Physics
                 p.velocity.y += GRAVITY * dt;
-                p.mesh.position.x += p.velocity.x * dt;
-                p.mesh.position.y += p.velocity.y * dt;
-                p.mesh.position.z += p.velocity.z * dt;
+                p.position.x += p.velocity.x * dt;
+                p.position.y += p.velocity.y * dt;
+                p.position.z += p.velocity.z * dt;
 
-                // Ground collision
-                if (p.mesh.position.y <= 0.05) {
-                    p.mesh.position.y = 0.05;
+                if (p.position.y <= 0.03) {
+                    p.position.y = 0.03;
                     p.grounded = true;
-                    p.mesh.rotation.x = -Math.PI / 2;
-                    // Reduce remaining lifetime
-                    p.lifetime = p.age + randomRange(0.5, 1.5);
-                }
-
-                // Billboard toward camera plane
-                if (!p.grounded) {
-                    const dir = camera.getWorldDirection(_camDir);
-                    p.mesh.rotation.y = Math.atan2(dir.x, dir.z) + Math.PI;
+                    p.lifetime = Math.min(p.lifetime, p.age + randomRange(0.3, 1.0));
+                    if (spawnDecalOnGround && !p.decalSpawned) {
+                        this._spawnDecal(p.position);
+                        p.decalSpawned = true;
+                    }
                 }
             }
 
-            // Fade out
+            // Fade via scale shrink
             const fadeStart = p.lifetime * 0.6;
+            let s = p.size;
             if (p.age > fadeStart) {
-                const alpha = 1 - (p.age - fadeStart) / (p.lifetime - fadeStart);
-                p.mesh.material.opacity = Math.max(0, alpha);
+                s *= 1 - (p.age - fadeStart) / (p.lifetime - fadeStart);
             }
+            if (s < 0.001) s = 0;
+
+            _scale.set(s, s, s);
+            _matrix.compose(p.position, _identityQuat, _scale);
+            mesh.setMatrixAt(writeIdx, _matrix);
+            writeIdx++;
+        }
+        mesh.count = writeIdx;
+        if (writeIdx > 0) mesh.instanceMatrix.needsUpdate = true;
+    }
+
+    _updateSubChunks(dt) {
+        this._updatePhysicsPool(this._subChunks, this._subChunkMesh, dt, MAX_SUB_CHUNKS, true);
+    }
+
+    _updateChunks(dt, vehiclePos, vehicleAngle, vehicleSpeed) {
+        let writeIdx = 0;
+        let chunkHitCount = 0;
+
+        // Pre-compute vehicle check position
+        const canCheck = Math.abs(vehicleSpeed) > 3;
+        let checkX = 0, checkZ = 0, fwdX = 0, fwdZ = 0;
+        if (canCheck) {
+            fwdX = Math.sin(vehicleAngle);
+            fwdZ = -Math.cos(vehicleAngle);
+            checkX = vehiclePos.x + fwdX * 2;
+            checkZ = vehiclePos.z + fwdZ * 2;
         }
 
-        // Update decals
-        for (let i = this.decals.length - 1; i >= 0; i--) {
-            const d = this.decals[i];
-            d.age += dt;
+        const _fwd = new THREE.Vector3();
 
-            if (d.age >= d.lifetime) {
-                this.scene.remove(d.mesh);
-                d.mesh.geometry.dispose();
-                d.mesh.material.dispose();
-                this.decals.splice(i, 1);
+        for (let i = 0; i < MAX_CHUNKS; i++) {
+            const c = this._chunks[i];
+            if (!c.active) continue;
+
+            c.age += dt;
+            if (c.age >= c.lifetime) {
+                c.active = false;
                 continue;
             }
 
-            // Fade out decals
+            // Physics
+            if (!c.grounded) {
+                c.velocity.y += GRAVITY * dt;
+                c.position.x += c.velocity.x * dt;
+                c.position.y += c.velocity.y * dt;
+                c.position.z += c.velocity.z * dt;
+
+                if (c.position.y <= 0.05) {
+                    c.position.y = 0.05;
+                    c.grounded = true;
+                    c.hittable = true;
+                    this._spawnDecal(c.position);
+                }
+            }
+
+            // Hit detection: car drives over grounded chunk
+            if (c.hittable && canCheck) {
+                const dx = checkX - c.position.x;
+                const dz = checkZ - c.position.z;
+                if (dx * dx + dz * dz < CHUNK_HIT_RADIUS * CHUNK_HIT_RADIUS) {
+                    _fwd.set(fwdX, 0, fwdZ);
+                    this._spawnSubChunks(c.position, _fwd, vehicleSpeed);
+                    this._spawnDecal(c.position);
+                    this._spawnCloud(c.position);
+                    c.active = false;
+                    chunkHitCount++;
+                    continue;
+                }
+            }
+
+            // Fade via scale shrink
+            const fadeStart = c.lifetime * 0.7;
+            let s = c.size;
+            if (c.age > fadeStart) {
+                s *= 1 - (c.age - fadeStart) / (c.lifetime - fadeStart);
+            }
+            if (s < 0.001) s = 0;
+
+            _scale.set(s, s, s);
+            _matrix.compose(c.position, _identityQuat, _scale);
+            this._chunkMesh.setMatrixAt(writeIdx, _matrix);
+            writeIdx++;
+        }
+        this._chunkMesh.count = writeIdx;
+        if (writeIdx > 0) this._chunkMesh.instanceMatrix.needsUpdate = true;
+
+        return chunkHitCount;
+    }
+
+    _updateClouds(dt) {
+        let writeIdx = 0;
+        for (let i = 0; i < MAX_CLOUDS; i++) {
+            const c = this._clouds[i];
+            if (!c.active) continue;
+
+            c.age += dt;
+            if (c.age >= c.lifetime) {
+                c.active = false;
+                continue;
+            }
+
+            // Rise slowly
+            c.position.y += 1.5 * dt;
+
+            // Scale down linearly (evaporation effect)
+            const t = c.age / c.lifetime;
+            const s = CLOUD_SIZE * (1 - t);
+
+            _scale.set(s, s, s);
+            _matrix.compose(c.position, _identityQuat, _scale);
+            this._cloudMesh.setMatrixAt(writeIdx, _matrix);
+            writeIdx++;
+        }
+        this._cloudMesh.count = writeIdx;
+        if (writeIdx > 0) this._cloudMesh.instanceMatrix.needsUpdate = true;
+    }
+
+    _updateDecals(dt) {
+        let writeIdx = 0;
+        for (let i = 0; i < MAX_DECALS; i++) {
+            const d = this._decals[i];
+            if (!d.active) continue;
+
+            d.age += dt;
+            if (d.age >= d.lifetime) {
+                d.active = false;
+                continue;
+            }
+
+            // Fade by scaling down in final 30%
+            let s = d.size;
             const fadeStart = d.lifetime * 0.7;
             if (d.age > fadeStart) {
-                const alpha = 1 - (d.age - fadeStart) / (d.lifetime - fadeStart);
-                d.mesh.material.opacity = Math.max(0, alpha);
+                s *= 1 - (d.age - fadeStart) / (d.lifetime - fadeStart);
             }
+            if (s < 0.001) s = 0;
+
+            _rotQuat.setFromAxisAngle(_yAxis, d.rotation);
+            _scale.set(s, s, s);
+            _matrix.compose(d.position, _rotQuat, _scale);
+            this._decalMesh.setMatrixAt(writeIdx, _matrix);
+            writeIdx++;
         }
+        this._decalMesh.count = writeIdx;
+        if (writeIdx > 0) this._decalMesh.instanceMatrix.needsUpdate = true;
     }
 }
