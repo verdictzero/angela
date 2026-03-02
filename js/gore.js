@@ -1,12 +1,13 @@
 /**
  * Gore System — Instanced Red Billboard Squares
  *
- * 5 subsystems, each backed by its own InstancedMesh:
- *   1. Gore Particles  — small red squares burst from NPC hits
- *   2. Big Gore Chunks  — large red squares launched ahead of car, hittable
- *   3. Sub-Gore Chunks  — tiny red squares from chunk re-hits
- *   4. Blood Clouds     — quick-fading red evaporation puffs
- *   5. Blood Decals     — ground splatter marks
+ * 6 subsystems, each backed by its own InstancedMesh:
+ *   1. Gore Particles    — small red squares burst from NPC hits
+ *   2. Big Gore Chunks   — large red squares launched ahead of car, hittable
+ *   3. Sub-Gore Chunks   — smaller squares from chunk re-hits
+ *   4. Sub-Sub Chunks    — tiny squares from sub-chunk ground impacts
+ *   5. Blood Clouds      — quick-fading red evaporation puffs
+ *   6. Blood Decals      — ground splatter marks
  */
 
 import * as THREE from 'three';
@@ -22,18 +23,25 @@ const PARTICLE_SIZE_MAX = 0.6;
 
 // ── Big Chunks (hittable, launched forward) ──────────────────
 const MAX_CHUNKS = 200;
-const CHUNKS_PER_HIT = 12;
+const CHUNKS_PER_HIT = 16;
 const CHUNK_LIFETIME = 8.0;
-const CHUNK_SIZE_MIN = 0.7;
-const CHUNK_SIZE_MAX = 1.8;
+const CHUNK_SIZE_MIN = 0.4;
+const CHUNK_SIZE_MAX = 1.0;
 const CHUNK_HIT_RADIUS = 2.0;
 
 // ── Sub-Chunks (from chunk explosions) ───────────────────────
 const MAX_SUB_CHUNKS = 600;
-const SUB_CHUNKS_PER_HIT = 16;
+const SUB_CHUNKS_PER_HIT = 20;
 const SUB_CHUNK_LIFETIME = 5.0;
-const SUB_CHUNK_SIZE_MIN = 0.2;
-const SUB_CHUNK_SIZE_MAX = 0.6;
+const SUB_CHUNK_SIZE_MIN = 0.12;
+const SUB_CHUNK_SIZE_MAX = 0.35;
+
+// ── Sub-Sub-Chunks (from sub-chunk ground impacts) ──────────
+const MAX_SUB_SUB_CHUNKS = 800;
+const SUB_SUB_CHUNKS_PER_HIT = 8;
+const SUB_SUB_CHUNK_LIFETIME = 3.0;
+const SUB_SUB_CHUNK_SIZE_MIN = 0.04;
+const SUB_SUB_CHUNK_SIZE_MAX = 0.14;
 
 // ── Blood Clouds (evaporation puffs) ─────────────────────────
 const MAX_CLOUDS = 100;
@@ -93,6 +101,13 @@ export class GoreSystem {
             spriteSheet: true,
         });
 
+        this._subSubChunkMat = createUnlitMaterial(goreSpriteSheet, {
+            transparent: true, side: THREE.DoubleSide,
+            billboard: true, depthWrite: false,
+            emissiveBoost: 0.35, alphaTest: 0.3,
+            spriteSheet: true,
+        });
+
         this._cloudMat = createUnlitColorMaterial(0xff0000, {
             transparent: true, side: THREE.DoubleSide,
             billboard: true, depthWrite: false, opacity: 0.6,
@@ -126,6 +141,11 @@ export class GoreSystem {
             new THREE.InstancedBufferAttribute(new Float32Array(MAX_SUB_CHUNKS), 1));
         this._subChunkMesh = this._createIM(subChunkGeo, this._subChunkMat, MAX_SUB_CHUNKS);
 
+        const subSubChunkGeo = quadGeo.clone();
+        subSubChunkGeo.setAttribute('spriteIndex',
+            new THREE.InstancedBufferAttribute(new Float32Array(MAX_SUB_SUB_CHUNKS), 1));
+        this._subSubChunkMesh = this._createIM(subSubChunkGeo, this._subSubChunkMat, MAX_SUB_SUB_CHUNKS);
+
         this._cloudMesh = this._createIM(quadGeo, this._cloudMat, MAX_CLOUDS);
         this._decalMesh = this._createIM(groundQuadGeo, this._decalMat, MAX_DECALS);
 
@@ -133,6 +153,7 @@ export class GoreSystem {
         this._particles = this._createPhysicsPool(MAX_PARTICLES);
         this._chunks = this._createChunkPool(MAX_CHUNKS);
         this._subChunks = this._createPhysicsPool(MAX_SUB_CHUNKS);
+        this._subSubChunks = this._createPhysicsPool(MAX_SUB_SUB_CHUNKS);
         this._clouds = this._createCloudPool(MAX_CLOUDS);
         this._decals = this._createDecalPool(MAX_DECALS);
     }
@@ -314,11 +335,11 @@ export class GoreSystem {
         c.active = true;
     }
 
-    _spawnDecal(position) {
+    _spawnDecal(position, sizeMin = 2.5, sizeMax = 6.0) {
         const d = this._acquire(this._decals);
         d.position.set(position.x, 0.02, position.z);
         d.rotation = Math.random() * Math.PI * 2;
-        d.size = randomRange(2.5, 6.0);
+        d.size = randomRange(sizeMin, sizeMax);
         d.lifetime = DECAL_LIFETIME * randomRange(0.7, 1.0);
         d.age = 0;
         d.active = true;
@@ -333,12 +354,35 @@ export class GoreSystem {
                 position.z + randomRange(-0.3, 0.3)
             );
             s.velocity.set(
-                forward.x * vehicleSpeed * randomRange(0.3, 1.2) + randomRange(-8, 8),
-                randomRange(4, 14),
-                forward.z * vehicleSpeed * randomRange(0.3, 1.2) + randomRange(-8, 8)
+                forward.x * vehicleSpeed * randomRange(0.3, 1.2) + randomRange(-10, 10),
+                randomRange(6, 18),
+                forward.z * vehicleSpeed * randomRange(0.3, 1.2) + randomRange(-10, 10)
             );
             s.size = randomRange(SUB_CHUNK_SIZE_MIN, SUB_CHUNK_SIZE_MAX);
             s.lifetime = SUB_CHUNK_LIFETIME * randomRange(0.6, 1.0);
+            s.age = 0;
+            s.grounded = false;
+            s.decalSpawned = false;
+            s.spriteIndex = Math.floor(Math.random() * 16);
+            s.active = true;
+        }
+    }
+
+    _spawnSubSubChunks(position) {
+        for (let i = 0; i < SUB_SUB_CHUNKS_PER_HIT; i++) {
+            const s = this._acquire(this._subSubChunks);
+            s.position.set(
+                position.x + randomRange(-0.15, 0.15),
+                position.y + randomRange(0.05, 0.3),
+                position.z + randomRange(-0.15, 0.15)
+            );
+            s.velocity.set(
+                randomRange(-5, 5),
+                randomRange(2, 7),
+                randomRange(-5, 5)
+            );
+            s.size = randomRange(SUB_SUB_CHUNK_SIZE_MIN, SUB_SUB_CHUNK_SIZE_MAX);
+            s.lifetime = SUB_SUB_CHUNK_LIFETIME * randomRange(0.5, 1.0);
             s.age = 0;
             s.grounded = false;
             s.decalSpawned = false;
@@ -370,12 +414,14 @@ export class GoreSystem {
         this._goreMat.uniforms.billboardRotY.value = rotY;
         this._chunkMat.uniforms.billboardRotY.value = rotY;
         this._subChunkMat.uniforms.billboardRotY.value = rotY;
+        this._subSubChunkMat.uniforms.billboardRotY.value = rotY;
         this._cloudMat.uniforms.billboardRotY.value = rotY;
 
         // Update each subsystem
         this._updatePhysicsPool(this._particles, this._particleMesh, dt, MAX_PARTICLES, false);
         const chunkHits = this._updateChunks(dt, vehiclePos, vehicleAngle, vehicleSpeed);
         this._updateSubChunks(dt);
+        this._updatePhysicsPool(this._subSubChunks, this._subSubChunkMesh, dt, MAX_SUB_SUB_CHUNKS, false);
         this._updateClouds(dt);
         this._updateDecals(dt);
 
@@ -436,7 +482,57 @@ export class GoreSystem {
     }
 
     _updateSubChunks(dt) {
-        this._updatePhysicsPool(this._subChunks, this._subChunkMesh, dt, MAX_SUB_CHUNKS, true);
+        let writeIdx = 0;
+        const spriteAttr = this._subChunkMesh.geometry.getAttribute('spriteIndex');
+
+        for (let i = 0; i < MAX_SUB_CHUNKS; i++) {
+            const p = this._subChunks[i];
+            if (!p.active) continue;
+
+            p.age += dt;
+            if (p.age >= p.lifetime) {
+                p.active = false;
+                continue;
+            }
+
+            if (!p.grounded) {
+                p.velocity.y += GRAVITY * dt;
+                p.position.x += p.velocity.x * dt;
+                p.position.y += p.velocity.y * dt;
+                p.position.z += p.velocity.z * dt;
+
+                if (p.position.y <= 0.03) {
+                    p.position.y = 0.03;
+                    p.grounded = true;
+                    p.lifetime = Math.min(p.lifetime, p.age + randomRange(0.3, 1.0));
+                    if (!p.decalSpawned) {
+                        this._spawnDecal(p.position, 1.0, 2.5);
+                        this._spawnCloud(p.position);
+                        this._spawnSubSubChunks(p.position);
+                        p.decalSpawned = true;
+                    }
+                }
+            }
+
+            // Fade via scale shrink
+            const fadeStart = p.lifetime * 0.6;
+            let s = p.size;
+            if (p.age > fadeStart) {
+                s *= 1 - (p.age - fadeStart) / (p.lifetime - fadeStart);
+            }
+            if (s < 0.001) s = 0;
+
+            _scale.set(s, s, s);
+            _matrix.compose(p.position, _identityQuat, _scale);
+            this._subChunkMesh.setMatrixAt(writeIdx, _matrix);
+            if (spriteAttr) spriteAttr.setX(writeIdx, p.spriteIndex);
+            writeIdx++;
+        }
+        this._subChunkMesh.count = writeIdx;
+        if (writeIdx > 0) {
+            this._subChunkMesh.instanceMatrix.needsUpdate = true;
+            if (spriteAttr) spriteAttr.needsUpdate = true;
+        }
     }
 
     _updateChunks(dt, vehiclePos, vehicleAngle, vehicleSpeed) {
