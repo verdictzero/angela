@@ -32,6 +32,10 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 container.appendChild(renderer.domElement);
 
+// Disable auto-reset so renderer.info stats accumulate across all
+// EffectComposer passes (scene render + bloom).  We reset manually each frame.
+renderer.info.autoReset = false;
+
 const scene = new THREE.Scene();
 
 // Fog — dynamically controlled by day/night cycle
@@ -209,6 +213,7 @@ function gameLoop() {
 
     if (!gameStarted) {
         updateCamera(dt);
+        renderer.info.reset();
         composer.render();
         return;
     }
@@ -274,7 +279,11 @@ function gameLoop() {
         sceneStatsCache = { objects: objCount, materials: matSet.size, lights: lightCount };
     }
 
-    // Update HUD — include extended debug info
+    // Render — reset stats manually, then render so stats accumulate across all passes
+    renderer.info.reset();
+    composer.render();
+
+    // Update HUD after render so renderer.info has accurate stats
     const currentChunk = road.getChunkAt(vehicle.position);
     hud.update(dt, vehicle.speedKmh, dayNight.getTimeString(), dayNight.getPhaseName(), {
         chunkId: currentChunk ? currentChunk.id : -1,
@@ -295,9 +304,6 @@ function gameLoop() {
         canvasWidth: renderer.domElement.width,
         canvasHeight: renderer.domElement.height,
     });
-
-    // Render
-    composer.render();
 }
 
 function updateCamera(dt) {
