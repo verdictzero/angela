@@ -21,11 +21,11 @@ const PARTICLE_SIZE_MIN = 0.06;
 const PARTICLE_SIZE_MAX = 0.9;
 
 // ── Big Chunks (hittable, launched forward) ──────────────────
-const MAX_CHUNKS = 600;
-const CHUNKS_PER_HIT = 45;
+const MAX_CHUNKS = 400;
+const CHUNKS_PER_HIT = 22;
 const CHUNK_LIFETIME = 8.0;
-const CHUNK_SIZE_MIN = 0.15;
-const CHUNK_SIZE_MAX = 1.0;
+const CHUNK_SIZE_MIN = 0.25;
+const CHUNK_SIZE_MAX = 3.0;
 const CHUNK_HIT_RADIUS = 2.0;
 
 // ── Sub-Chunks (from chunk explosions) ───────────────────────
@@ -75,7 +75,7 @@ export class GoreSystem {
         this._chunkMat = createUnlitColorMaterial(0xffffff, {
             transparent: true, side: THREE.DoubleSide,
             billboard: true, depthWrite: false,
-            emissiveBoost: 0.55, useInstanceColor: true
+            emissiveBoost: 0.35, useInstanceColor: true
         });
 
         this._subChunkMat = createUnlitColorMaterial(0xffffff, {
@@ -275,10 +275,10 @@ export class GoreSystem {
             c.age = 0;
             c.grounded = false;
             c.hittable = false;
-            // Bright meaty shades for visible chunks — vivid crimson to deep red
-            c.colorR = randomRange(0.55, 0.95);
-            c.colorG = randomRange(0.0, 0.08);
-            c.colorB = randomRange(0.0, 0.05);
+            // Darker meatier shades for big chunks — some nearly black, some deep crimson
+            c.colorR = randomRange(0.18, 0.60);
+            c.colorG = randomRange(0.0, 0.05);
+            c.colorB = randomRange(0.0, 0.02);
             c.active = true;
         }
 
