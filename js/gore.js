@@ -18,8 +18,8 @@ import { randomRange, createCanvasTexture } from './utils.js';
 const MAX_PARTICLES = 1500;
 const PARTICLES_PER_HIT = 60;
 const PARTICLE_LIFETIME = 3.5;
-const PARTICLE_SIZE_MIN = 0.12;
-const PARTICLE_SIZE_MAX = 0.6;
+const PARTICLE_SIZE_MIN = 0.05;
+const PARTICLE_SIZE_MAX = 0.2;
 
 // ── Big Chunks (hittable, launched forward) ──────────────────
 const MAX_CHUNKS = 200;
@@ -40,8 +40,8 @@ const SUB_CHUNK_SIZE_MAX = 0.35;
 const MAX_SUB_SUB_CHUNKS = 800;
 const SUB_SUB_CHUNKS_PER_HIT = 8;
 const SUB_SUB_CHUNK_LIFETIME = 3.0;
-const SUB_SUB_CHUNK_SIZE_MIN = 0.04;
-const SUB_SUB_CHUNK_SIZE_MAX = 0.14;
+const SUB_SUB_CHUNK_SIZE_MIN = 0.02;
+const SUB_SUB_CHUNK_SIZE_MAX = 0.08;
 
 // ── Blood Clouds (evaporation puffs) ─────────────────────────
 const MAX_CLOUDS = 100;
@@ -72,11 +72,14 @@ export class GoreSystem {
         // Blood overlay element
         this._bloodOverlay = document.getElementById('blood-overlay');
 
+        // ── Procedural blood cloud texture ──
+        this._bloodCloudTex = this._generateBloodCloudTexture();
+
         // ── Materials (bright arterial colors + emissive for night visibility) ──
-        this._goreMat = createUnlitColorMaterial(0xff1100, {
+        this._goreMat = createUnlitMaterial(this._bloodCloudTex, {
             transparent: true, side: THREE.DoubleSide,
             billboard: true, depthWrite: false,
-            emissiveBoost: 0.35
+            emissiveBoost: 0.35, alphaTest: 0.05
         });
 
         // Gore sprite sheet texture (4x4 grid, 256px cells)
@@ -108,10 +111,10 @@ export class GoreSystem {
             spriteSheet: true,
         });
 
-        this._cloudMat = createUnlitColorMaterial(0xff0000, {
+        this._cloudMat = createUnlitMaterial(this._bloodCloudTex, {
             transparent: true, side: THREE.DoubleSide,
             billboard: true, depthWrite: false, opacity: 0.6,
-            emissiveBoost: 0.35
+            emissiveBoost: 0.35, alphaTest: 0.05
         });
 
         this._decalTex = this._generateDecalTexture();
@@ -240,6 +243,42 @@ export class GoreSystem {
 
         const tex = new THREE.CanvasTexture(canvas);
         tex.magFilter = THREE.NearestFilter;
+        return tex;
+    }
+
+    _generateBloodCloudTexture() {
+        const canvas = createCanvasTexture(64, 64, (ctx, w, h) => {
+            ctx.clearRect(0, 0, w, h);
+            const cx = w / 2, cy = h / 2;
+
+            // Soft radial gradient center
+            const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, w / 2);
+            grad.addColorStop(0, 'rgba(180, 0, 0, 1)');
+            grad.addColorStop(0.4, 'rgba(140, 0, 0, 0.6)');
+            grad.addColorStop(1, 'rgba(100, 0, 0, 0)');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, w, h);
+
+            // Layer several offset circles for organic blobby shape
+            for (let i = 0; i < 6; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const dist = Math.random() * 8;
+                const bx = cx + Math.cos(angle) * dist;
+                const by = cy + Math.sin(angle) * dist;
+                const r = 8 + Math.random() * 12;
+                const blobGrad = ctx.createRadialGradient(bx, by, 0, bx, by, r);
+                blobGrad.addColorStop(0, `rgba(${150 + Math.random() * 50 | 0}, 0, 0, ${0.4 + Math.random() * 0.3})`);
+                blobGrad.addColorStop(1, 'rgba(120, 0, 0, 0)');
+                ctx.fillStyle = blobGrad;
+                ctx.beginPath();
+                ctx.arc(bx, by, r, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        });
+
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.magFilter = THREE.LinearFilter;
+        tex.minFilter = THREE.LinearFilter;
         return tex;
     }
 
