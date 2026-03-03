@@ -295,17 +295,6 @@ body {
     padding-bottom: 0;
 }
 
-/* Windshield Blood Canvas */
-#windshield-canvas {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 41;
-    pointer-events: none;
-}
-
 /* Health Bar */
 #hud-health-bar {
     position: fixed;
