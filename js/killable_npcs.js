@@ -21,7 +21,7 @@ const MOPED_HEIGHT = 2.2;
 const MOPED_WIDTH = MOPED_HEIGHT * 0.4;  // maintain source image aspect ratio (250x625)
 
 const STATIC_NPC_SPAWN_CHANCE = 0.08;  // ~8% chance per spawn slot
-const STATIC_NPC_HEIGHT = 1.8;
+const STATIC_NPC_HEIGHT = 2.25;
 const STATIC_NPC_WIDTH = STATIC_NPC_HEIGHT * 0.5;
 
 // Reusable math objects
