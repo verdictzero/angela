@@ -42,6 +42,8 @@ const BLOOD_IMAGES = [
     'assets/blood_spatter/blood_1.png',
     'assets/blood_spatter/blood_2.png',
     'assets/blood_spatter/blood_3.png',
+    'assets/blood_spatter/blood_4.png',
+    'assets/blood_spatter/blood_5.png',
 ];
 
 function _rng(min, max) { return min + Math.random() * (max - min); }
