@@ -26,37 +26,18 @@
         <div id="updating-text">UPDATING UI</div>
     </div>
 
-    <!-- HUD Bar -->
+    <!-- HUD Bar — fixed 7-segment display console -->
     <div id="hud-bar">
-        <span id="hud-score">SCORE: 000000</span>
-        <span class="hud-sep">|</span>
-        <span id="hud-speed">VEL: 000 mph</span>
-        <span class="hud-sep">|</span>
-        <span id="hud-time">TIME 00:00:00</span>
-    </div>
-
-    <!-- HUD extras (combo, health, debug) -->
-    <div id="hud">
-        <div id="hud-combo" class="hidden"></div>
-        <div id="hud-health-bar"><div id="hud-health-fill"></div></div>
-        <div id="hud-debug-wrapper">
-            <div id="hud-fluid">FLUID: 100</div>
-            <button id="btn-slowmo">SLOW MO</button>
-            <button id="hud-debug-toggle">DEBUG</button>
-            <div id="hud-debug"></div>
-        </div>
-    </div>
-
-    <!-- Debug Stats Overlay -->
-    <div id="debug-stats">
-        <div id="debug-stats-panel" class="collapsed">
-            <div id="debug-fps">FPS: --</div>
-            <div id="debug-draws">DRAWS: --</div>
-            <div id="debug-tris">TRIS: --</div>
-            <div id="debug-geoms">GEOMS: --</div>
-            <div id="debug-textures">TEX: --</div>
-        </div>
-        <button id="debug-stats-toggle">STATS</button>
+        <div class="hud-slot"><span id="hud-speed">VEL: 000 mph</span></div>
+        <div class="hud-slot"><span id="hud-tach">TACH: 0000/G0</span></div>
+        <div class="hud-slot"><span id="hud-hp">HP: 100/100</span></div>
+        <div class="hud-slot"><span id="hud-fluid">W_FLD: 100</span></div>
+        <div class="hud-slot"><span id="hud-fuel">FUEL: 100</span></div>
+        <div class="hud-slot"><span id="hud-time">TIME 00:00</span></div>
+        <div class="hud-slot hud-slot-sep"></div>
+        <div class="hud-slot"><span id="hud-mult" class="hud-amber">MULTx00</span></div>
+        <div class="hud-slot"><span id="hud-hit" class="hud-amber">+00000</span></div>
+        <div class="hud-slot"><span id="hud-score">SCORE: 000000</span></div>
     </div>
 
     <!-- Touch Controls -->

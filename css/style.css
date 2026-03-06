@@ -164,12 +164,9 @@ body {
     top: 0;
     left: 0;
     width: 100%;
-    height: 32px;
     z-index: 50;
     display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0;
+    flex-wrap: wrap;
     background: #000;
     font-family: '7seg', 'Courier New', monospace;
     font-size: 1rem;
@@ -177,156 +174,40 @@ body {
     text-shadow: 0 0 6px rgba(0, 255, 0, 0.6);
     letter-spacing: 0.08em;
     pointer-events: none;
+}
+
+/* Each slot is a flex-equal container; text centered inside */
+.hud-slot {
+    flex: 1 1 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 7px 0;
     white-space: nowrap;
+    border-right: 1px solid #0a1a0a;
 }
 
-#hud-bar .hud-sep {
-    color: #064006;
-    margin: 0 1em;
+.hud-slot:last-child {
+    border-right: none;
+}
+
+/* Separator slot — thicker divider between vehicle & score sections */
+.hud-slot-sep {
+    flex: 0 0 2px;
+    padding: 0;
+    background: #0a3a0a;
+    border-right: none;
+}
+
+/* Colors */
+#hud-bar .hud-amber {
+    color: #ff9900;
+    text-shadow: 0 0 6px rgba(255, 153, 0, 0.6);
+}
+
+#hud-bar .hud-amber.dim {
+    color: #3a2200;
     text-shadow: none;
-}
-
-#hud-bar #hud-score,
-#hud-bar #hud-speed,
-#hud-bar #hud-time {
-    display: inline;
-}
-
-/* ── HUD extras ────────────────────────────────────── */
-#hud {
-    position: fixed;
-    z-index: 50;
-    pointer-events: none;
-}
-
-/* Combo — top-right, below bar */
-#hud-combo {
-    position: fixed;
-    top: 40px;
-    right: 30px;
-    font-size: 1.2rem;
-    color: #ff8800;
-    text-shadow: 0 0 8px #ff4400;
-    transition: opacity 0.3s;
-}
-
-#hud-combo.hidden {
-    opacity: 0;
-}
-
-/* Debug Panel Wrapper — upper-left, below bar */
-#hud-debug-wrapper {
-    position: fixed;
-    top: 38px;
-    left: 30px;
-}
-
-/* Debug Toggle Button */
-#hud-debug-toggle {
-    display: block;
-    pointer-events: auto;
-    cursor: pointer;
-    font-family: 'Courier New', monospace;
-    font-size: 0.65rem;
-    color: #88aacc;
-    background: rgba(0, 0, 0, 0.45);
-    border: 1px solid rgba(136, 170, 204, 0.3);
-    border-radius: 3px;
-    padding: 2px 8px;
-    letter-spacing: 0.08em;
-    opacity: 0.85;
-    margin-bottom: 4px;
-    transition: background 0.2s, color 0.2s;
-}
-
-#hud-debug-toggle:hover {
-    background: rgba(0, 0, 0, 0.65);
-    color: #aaccee;
-}
-
-/* Slow Mo Button */
-#btn-slowmo {
-    display: block;
-    pointer-events: auto;
-    cursor: pointer;
-    font-family: 'Courier New', monospace;
-    font-size: 0.65rem;
-    color: #88aacc;
-    background: rgba(0, 0, 0, 0.45);
-    border: 1px solid rgba(136, 170, 204, 0.3);
-    border-radius: 3px;
-    padding: 2px 8px;
-    letter-spacing: 0.08em;
-    opacity: 0.85;
-    margin-bottom: 4px;
-    transition: background 0.2s, color 0.2s, border-color 0.2s, text-shadow 0.2s;
-}
-
-#btn-slowmo:hover {
-    background: rgba(0, 0, 0, 0.65);
-    color: #aaccee;
-}
-
-#btn-slowmo.active {
-    color: #ff6622;
-    border-color: rgba(255, 100, 30, 0.6);
-    text-shadow: 0 0 6px rgba(255, 80, 0, 0.5);
-    background: rgba(80, 20, 0, 0.5);
-}
-
-/* Debug Panel */
-#hud-debug {
-    font-size: 0.72rem;
-    color: #88aacc;
-    text-shadow: 0 0 3px rgba(80, 130, 180, 0.4);
-    letter-spacing: 0.03em;
-    line-height: 1.5;
-    white-space: pre;
-    opacity: 0.85;
-    background: rgba(0, 0, 0, 0.35);
-    padding: 6px 10px;
-    border-radius: 4px;
-    max-height: 500px;
-    overflow: hidden;
-    transition: max-height 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
-}
-
-/* Collapsed state */
-#hud-debug.collapsed {
-    max-height: 0;
-    opacity: 0;
-    padding-top: 0;
-    padding-bottom: 0;
-}
-
-/* Health Bar */
-#hud-health-bar {
-    position: fixed;
-    top: 70px;
-    right: 30px;
-    width: 150px;
-    height: 12px;
-    background: rgba(0, 0, 0, 0.5);
-    border: 1px solid rgba(255, 50, 50, 0.4);
-    border-radius: 2px;
-}
-
-#hud-health-fill {
-    width: 100%;
-    height: 100%;
-    background: #cc0000;
-    box-shadow: 0 0 6px rgba(255, 0, 0, 0.5);
-    transition: width 0.3s ease;
-}
-
-/* Washer Fluid Indicator */
-#hud-fluid {
-    font-size: 0.65rem;
-    color: #66aadd;
-    text-shadow: 0 0 4px rgba(80, 150, 220, 0.4);
-    letter-spacing: 0.06em;
-    margin-bottom: 4px;
-    opacity: 0.85;
 }
 
 /* Blood Overlay */
@@ -436,51 +317,6 @@ body {
     background: rgba(180, 0, 0, 0.7);
 }
 
-/* Debug Stats Panel */
-#debug-stats {
-    position: fixed;
-    top: 36px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 55;
-    font-family: 'Courier New', monospace;
-    font-size: 0.75rem;
-}
-
-#debug-stats-toggle {
-    display: block;
-    margin: 0 auto;
-    background: rgba(0, 40, 0, 0.6);
-    color: #0f0;
-    border: 1px solid rgba(0, 255, 0, 0.3);
-    font-family: 'Courier New', monospace;
-    font-size: 0.7rem;
-    padding: 2px 10px;
-    cursor: pointer;
-    text-shadow: 0 0 4px #0f0;
-    letter-spacing: 0.1em;
-}
-
-#debug-stats-toggle:hover {
-    background: rgba(0, 60, 0, 0.8);
-    border-color: rgba(0, 255, 0, 0.5);
-}
-
-#debug-stats-panel {
-    background: rgba(0, 20, 0, 0.7);
-    border: 1px solid rgba(0, 255, 0, 0.2);
-    padding: 6px 12px;
-    margin-bottom: 4px;
-    color: #0f0;
-    text-shadow: 0 0 4px rgba(0, 255, 0, 0.5);
-    line-height: 1.5;
-    white-space: nowrap;
-}
-
-#debug-stats-panel.collapsed {
-    display: none;
-}
-
 /* Responsive adjustments */
 @media (max-width: 600px) {
     #start-screen h1 {
@@ -492,33 +328,11 @@ body {
     }
 
     #hud-bar {
-        height: 26px;
-        font-size: 0.75rem;
+        font-size: 0.7rem;
     }
 
-    #hud-bar .hud-sep {
-        margin: 0 0.5em;
-    }
-
-    #hud-combo {
-        top: 32px;
-        right: 15px;
-        font-size: 1rem;
-    }
-
-    #hud-debug-wrapper {
-        top: 30px;
-        left: 10px;
-    }
-
-    #hud-debug {
-        font-size: 0.55rem;
-        padding: 4px 6px;
-        max-height: 50vh;
-        overflow-y: auto;
-    }
-
-    #hud-debug-toggle {
-        font-size: 0.55rem;
+    .hud-slot {
+        flex: 0 0 25%;
+        padding: 4px 0;
     }
 }

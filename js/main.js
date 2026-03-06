@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { createUzeboxLUTPass } from './uzeboxLUT.js';
 import { InputManager } from './input.js';
 import { RoadManager } from './road.js';
 import { Vehicle } from './vehicle.js';
@@ -17,7 +18,7 @@ import { KillableNPCManager } from './killable_npcs.js';
 import { GoreSystem } from './gore.js';
 import { HUD } from './hud.js';
 import { DayNightCycle } from './daynight.js';
-import { DebugStats } from './debugStats.js';
+
 import { FoliageManager } from './foliage.js';
 import { unlitUniforms } from './shaders.js';
 
@@ -62,6 +63,13 @@ const bloomPass = new UnrealBloomPass(
 );
 composer.addPass(bloomPass);
 
+// Uzebox palette LUT — async load, inserted after bloom once ready
+createUzeboxLUTPass('assets/uzebox.hex').then(lutPass => {
+    // Mark bloom as no longer the final pass
+    bloomPass.renderToScreen = false;
+    composer.addPass(lutPass);
+});
+
 // ── Lighting ──────────────────────────────────────────────────
 
 const ambient = new THREE.AmbientLight(0x334455, 1.5);
@@ -82,9 +90,8 @@ const vehicle = new Vehicle();
 const cockpit = new Cockpit(camera);
 const killableNPCs = new KillableNPCManager(scene);
 const gore = new GoreSystem(scene);
-const hud = new HUD(renderer);
+const hud = new HUD();
 const dayNight = new DayNightCycle(scene);
-const debugStats = new DebugStats();
 const foliage = new FoliageManager(scene, road);
 
 // Cockpit is child of camera, add camera to scene
@@ -219,7 +226,7 @@ function gameLoop() {
         updateCamera(dt);
         renderer.info.reset();
         composer.render();
-        debugStats.update(dt, renderer);
+
         return;
     }
 
@@ -245,7 +252,6 @@ function gameLoop() {
     const treeHit = foliage.checkTreeCollision(vehicle.position, 1.2);
     if (treeHit) {
         vehicle.applyTreeImpact(vehicle.speed);
-        cockpit.addBloodSplatter(0.3);
     }
 
     // Check NPC hits
@@ -299,9 +305,6 @@ function gameLoop() {
     renderer.info.reset();
     composer.render();
 
-    // Debug stats — MUST be after render so renderer.info has current frame data
-    debugStats.update(dt, renderer);
-
     // Update HUD after render so renderer.info has accurate stats
     const currentChunk = road.getChunkAt(vehicle.position);
     hud.update(dt, vehicle.speedKmh, dayNight.getTimeString(), dayNight.getPhaseName(), {
@@ -346,14 +349,6 @@ function updateCamera(dt) {
     camera.lookAt(lookTarget);
 }
 
-// ── Slow Mo Toggle ────────────────────────────────────────────
-const btnSlowmo = document.getElementById('btn-slowmo');
-if (btnSlowmo) {
-    btnSlowmo.addEventListener('click', () => {
-        timeScale = timeScale < 1.0 ? 1.0 : 0.3;
-        btnSlowmo.classList.toggle('active', timeScale < 1.0);
-    });
-}
 
 // ── Initialize ────────────────────────────────────────────────
 
