@@ -3,13 +3,13 @@
  *
  * Spawns moped riders on the road that drive in the same direction
  * as the player at varying slower speeds. NPCs follow the road
- * by advancing along road spine points. Uses a single InstancedMesh
- * with shader-based billboard for all NPCs.
+ * by advancing along road spine points. Uses three InstancedMeshes
+ * (back/front/side) to show the correct sprite based on viewing angle.
  */
 
 import * as THREE from 'three';
 import { createUnlitMaterial } from './shaders.js';
-import { randomRange } from './utils.js';
+import { randomRange, normalizeAngle } from './utils.js';
 
 const HIT_RADIUS = 2.5;             // hit detection radius
 const HIT_FORWARD = 4;              // how far in front of car to check
@@ -18,7 +18,12 @@ const DESPAWN_BEHIND = 80;           // despawn if this far behind player
 const MOPED_SPEED_MIN = 5;          // m/s (~18 km/h)
 const MOPED_SPEED_MAX = 12;         // m/s (~43 km/h)
 const MOPED_HEIGHT = 2.2;
-const MOPED_WIDTH = MOPED_HEIGHT * 0.4;  // maintain source image aspect ratio (250x625)
+const MOPED_WIDTH_BACK  = MOPED_HEIGHT * (250 / 625);   // ~0.88m
+const MOPED_WIDTH_FRONT = MOPED_HEIGHT * (289 / 625);   // ~1.02m
+const MOPED_WIDTH_SIDE  = MOPED_HEIGHT * (628 / 625);   // ~2.21m
+
+const ANGLE_FRONT = Math.PI / 4;      // < 45° from front → front sprite
+const ANGLE_BACK  = Math.PI * 3 / 4;  // > 135° from front → back sprite
 
 const STATIC_NPC_SPAWN_CHANCE = 0.08;  // ~8% chance per spawn slot
 const STATIC_NPC_HEIGHT = 2.25;
@@ -29,19 +34,44 @@ const _identityQuat = new THREE.Quaternion();
 const _oneScale = new THREE.Vector3(1, 1, 1);
 const _matrix = new THREE.Matrix4();
 const _camDir = new THREE.Vector3();
+const _quat = new THREE.Quaternion();
+const _scale = new THREE.Vector3();
+const _yAxis = new THREE.Vector3(0, 1, 0);
 
 // Shared textures — loaded once
-let mopedTexture = null;
+let mopedBackTexture = null;
+let mopedFrontTexture = null;
+let mopedSideTexture = null;
 let staticNpcTexture = null;
 
-function getMopedTexture() {
-    if (!mopedTexture) {
-        mopedTexture = new THREE.TextureLoader().load('assets/moped_guy.png');
-        mopedTexture.colorSpace = THREE.SRGBColorSpace;
-        mopedTexture.magFilter = THREE.NearestFilter;
-        mopedTexture.minFilter = THREE.NearestFilter;
+function getMopedBackTexture() {
+    if (!mopedBackTexture) {
+        mopedBackTexture = new THREE.TextureLoader().load('assets/moped_guy.png');
+        mopedBackTexture.colorSpace = THREE.SRGBColorSpace;
+        mopedBackTexture.magFilter = THREE.NearestFilter;
+        mopedBackTexture.minFilter = THREE.NearestFilter;
     }
-    return mopedTexture;
+    return mopedBackTexture;
+}
+
+function getMopedFrontTexture() {
+    if (!mopedFrontTexture) {
+        mopedFrontTexture = new THREE.TextureLoader().load('assets/moped_guy_front.png');
+        mopedFrontTexture.colorSpace = THREE.SRGBColorSpace;
+        mopedFrontTexture.magFilter = THREE.NearestFilter;
+        mopedFrontTexture.minFilter = THREE.NearestFilter;
+    }
+    return mopedFrontTexture;
+}
+
+function getMopedSideTexture() {
+    if (!mopedSideTexture) {
+        mopedSideTexture = new THREE.TextureLoader().load('assets/moped_guy_side.png');
+        mopedSideTexture.colorSpace = THREE.SRGBColorSpace;
+        mopedSideTexture.magFilter = THREE.NearestFilter;
+        mopedSideTexture.minFilter = THREE.NearestFilter;
+    }
+    return mopedSideTexture;
 }
 
 function getStaticNpcTexture() {
@@ -54,28 +84,39 @@ function getStaticNpcTexture() {
     return staticNpcTexture;
 }
 
+function createMopedMesh(scene, width, texture, billboard) {
+    const geo = new THREE.PlaneGeometry(width, MOPED_HEIGHT);
+    geo.translate(0, MOPED_HEIGHT / 2, 0);
+
+    const mat = createUnlitMaterial(texture, {
+        transparent: true,
+        alphaTest: 0.1,
+        side: THREE.DoubleSide,
+        billboard,
+    });
+
+    const mesh = new THREE.InstancedMesh(geo, mat, MAX_NPCS);
+    mesh.count = 0;
+    mesh.frustumCulled = false;
+    scene.add(mesh);
+    return { mesh, material: mat };
+}
+
 export class KillableNPCManager {
     constructor(scene) {
         this.scene = scene;
         this.npcs = [];
 
-        // Create InstancedMesh — bottom-anchored quad at moped size
-        const geo = new THREE.PlaneGeometry(MOPED_WIDTH, MOPED_HEIGHT);
-        geo.translate(0, MOPED_HEIGHT / 2, 0);
+        // Three moped meshes: back, front (oriented by road heading), side (billboard)
+        const back  = createMopedMesh(scene, MOPED_WIDTH_BACK,  getMopedBackTexture(),  false);
+        const front = createMopedMesh(scene, MOPED_WIDTH_FRONT, getMopedFrontTexture(), false);
+        const side  = createMopedMesh(scene, MOPED_WIDTH_SIDE,  getMopedSideTexture(),  true);
 
-        this._material = createUnlitMaterial(getMopedTexture(), {
-            transparent: true,
-            alphaTest: 0.1,
-            side: THREE.DoubleSide,
-            billboard: true,
-        });
+        this._backMesh  = back.mesh;   this._backMat  = back.material;
+        this._frontMesh = front.mesh;  this._frontMat = front.material;
+        this._sideMesh  = side.mesh;   this._sideMat  = side.material;
 
-        this._mesh = new THREE.InstancedMesh(geo, this._material, MAX_NPCS);
-        this._mesh.count = 0;
-        this._mesh.frustumCulled = false;
-        this.scene.add(this._mesh);
-
-        // Static NPC InstancedMesh — separate texture, same billboard approach
+        // Static NPC InstancedMesh — separate texture, billboard
         const staticGeo = new THREE.PlaneGeometry(STATIC_NPC_WIDTH, STATIC_NPC_HEIGHT);
         staticGeo.translate(0, STATIC_NPC_HEIGHT / 2, 0);
 
@@ -183,33 +224,73 @@ export class KillableNPCManager {
             }
         }
 
-        // Rebuild instance matrices — separate meshes for moped vs static
-        let mopedCount = 0;
+        // Camera position for angle calculations
+        const camPos = camera.position;
+
+        // Rebuild instance matrices — three moped meshes + static mesh
+        let backCount = 0;
+        let frontCount = 0;
+        let sideCount = 0;
         let staticCount = 0;
+
         for (const npc of this.npcs) {
             if (npc.isStatic) {
                 _matrix.compose(npc.position, _identityQuat, _oneScale);
                 this._staticMesh.setMatrixAt(staticCount, _matrix);
                 staticCount++;
+                continue;
+            }
+
+            // Get road forward direction at NPC's position
+            const pt = roadPoints[Math.min(npc.roadIndex, maxIdx)];
+            const mopedAngle = Math.atan2(pt.forward.x, pt.forward.z);
+
+            // Angle from NPC to camera
+            const toCamAngle = Math.atan2(camPos.x - npc.position.x, camPos.z - npc.position.z);
+            const relAngle = normalizeAngle(toCamAngle - mopedAngle);
+            const absAngle = Math.abs(relAngle);
+
+            if (absAngle < ANGLE_FRONT) {
+                // Front view — camera is ahead of moped
+                // Sprite plane faces along road direction (toward camera)
+                _quat.setFromAxisAngle(_yAxis, mopedAngle);
+                _matrix.compose(npc.position, _quat, _oneScale);
+                this._frontMesh.setMatrixAt(frontCount, _matrix);
+                frontCount++;
+            } else if (absAngle > ANGLE_BACK) {
+                // Back view — camera is behind moped
+                // Sprite plane faces opposite to road direction (toward camera)
+                _quat.setFromAxisAngle(_yAxis, mopedAngle + Math.PI);
+                _matrix.compose(npc.position, _quat, _oneScale);
+                this._backMesh.setMatrixAt(backCount, _matrix);
+                backCount++;
             } else {
-                _matrix.compose(npc.position, _identityQuat, _oneScale);
-                this._mesh.setMatrixAt(mopedCount, _matrix);
-                mopedCount++;
+                // Side view — billboard, mirror when camera is on right side
+                const mirrorX = relAngle < 0 ? -1 : 1;
+                _scale.set(mirrorX, 1, 1);
+                _matrix.compose(npc.position, _identityQuat, _scale);
+                this._sideMesh.setMatrixAt(sideCount, _matrix);
+                sideCount++;
             }
         }
-        this._mesh.count = mopedCount;
-        if (mopedCount > 0) {
-            this._mesh.instanceMatrix.needsUpdate = true;
-        }
-        this._staticMesh.count = staticCount;
-        if (staticCount > 0) {
-            this._staticMesh.instanceMatrix.needsUpdate = true;
-        }
 
-        // Billboard uniform — both meshes
+        // Update moped mesh counts
+        this._backMesh.count = backCount;
+        if (backCount > 0) this._backMesh.instanceMatrix.needsUpdate = true;
+
+        this._frontMesh.count = frontCount;
+        if (frontCount > 0) this._frontMesh.instanceMatrix.needsUpdate = true;
+
+        this._sideMesh.count = sideCount;
+        if (sideCount > 0) this._sideMesh.instanceMatrix.needsUpdate = true;
+
+        this._staticMesh.count = staticCount;
+        if (staticCount > 0) this._staticMesh.instanceMatrix.needsUpdate = true;
+
+        // Billboard uniform — only for side mesh and static mesh
         const dir = camera.getWorldDirection(_camDir);
         const rotY = Math.atan2(dir.x, -dir.z);
-        this._material.uniforms.billboardRotY.value = rotY;
+        this._sideMat.uniforms.billboardRotY.value = rotY;
         this._staticMaterial.uniforms.billboardRotY.value = rotY;
     }
 
