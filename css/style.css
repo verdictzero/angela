@@ -151,43 +151,58 @@ body {
     50% { opacity: 0.3; }
 }
 
-/* ── HUD ───────────────────────────────────────────── */
+/* ── 7-Segment Font ────────────────────────────────── */
+@font-face {
+    font-family: '7seg';
+    src: url('../assets/fonts/7_seg.ttf') format('truetype');
+    font-display: swap;
+}
+
+/* ── HUD Bar ───────────────────────────────────────── */
+#hud-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 32px;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    background: #000;
+    font-family: '7seg', 'Courier New', monospace;
+    font-size: 1rem;
+    color: #0f0;
+    text-shadow: 0 0 6px rgba(0, 255, 0, 0.6);
+    letter-spacing: 0.08em;
+    pointer-events: none;
+    white-space: nowrap;
+}
+
+#hud-bar .hud-sep {
+    color: #064006;
+    margin: 0 1em;
+    text-shadow: none;
+}
+
+#hud-bar #hud-score,
+#hud-bar #hud-speed,
+#hud-bar #hud-time {
+    display: inline;
+}
+
+/* ── HUD extras ────────────────────────────────────── */
 #hud {
     position: fixed;
     z-index: 50;
     pointer-events: none;
 }
 
-/* Speed — top-right */
-#hud-speed {
-    position: fixed;
-    top: 20px;
-    right: 30px;
-    font-size: 3rem;
-    font-weight: bold;
-    color: #0f0;
-    text-shadow: 0 0 10px #0f0;
-}
-
-#hud-speed span {
-    font-size: 1rem;
-    color: #0a0;
-}
-
-/* Score — below speed */
-#hud-score {
-    position: fixed;
-    top: 75px;
-    right: 30px;
-    font-size: 1.5rem;
-    color: #ff4444;
-    text-shadow: 0 0 8px #ff0000;
-}
-
-/* Combo — below score */
+/* Combo — top-right, below bar */
 #hud-combo {
     position: fixed;
-    top: 110px;
+    top: 40px;
     right: 30px;
     font-size: 1.2rem;
     color: #ff8800;
@@ -199,21 +214,10 @@ body {
     opacity: 0;
 }
 
-/* Time — top-left */
-#hud-time {
-    position: fixed;
-    top: 20px;
-    left: 30px;
-    font-size: 1.1rem;
-    color: #aabbcc;
-    text-shadow: 0 0 6px rgba(100, 150, 200, 0.5);
-    letter-spacing: 0.1em;
-}
-
-/* Debug Panel Wrapper — upper-left, below time */
+/* Debug Panel Wrapper — upper-left, below bar */
 #hud-debug-wrapper {
     position: fixed;
-    top: 50px;
+    top: 38px;
     left: 30px;
 }
 
@@ -298,7 +302,7 @@ body {
 /* Health Bar */
 #hud-health-bar {
     position: fixed;
-    top: 140px;
+    top: 70px;
     right: 30px;
     width: 150px;
     height: 12px;
@@ -435,7 +439,7 @@ body {
 /* Debug Stats Panel */
 #debug-stats {
     position: fixed;
-    top: 20px;
+    top: 36px;
     left: 50%;
     transform: translateX(-50%);
     z-index: 55;
@@ -487,32 +491,23 @@ body {
         font-size: 1.8rem;
     }
 
-    #hud-speed {
-        font-size: 2rem;
-        top: 10px;
-        right: 15px;
+    #hud-bar {
+        height: 26px;
+        font-size: 0.75rem;
     }
 
-    #hud-score {
-        font-size: 1.1rem;
-        top: 55px;
-        right: 15px;
+    #hud-bar .hud-sep {
+        margin: 0 0.5em;
     }
 
     #hud-combo {
-        top: 82px;
+        top: 32px;
         right: 15px;
         font-size: 1rem;
     }
 
-    #hud-time {
-        font-size: 0.9rem;
-        top: 10px;
-        left: 15px;
-    }
-
     #hud-debug-wrapper {
-        top: 38px;
+        top: 30px;
         left: 10px;
     }
 

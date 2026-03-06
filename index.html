@@ -26,13 +26,19 @@
         <div id="updating-text">UPDATING UI</div>
     </div>
 
-    <!-- HUD Overlay -->
+    <!-- HUD Bar -->
+    <div id="hud-bar">
+        <span id="hud-score">SCORE: 000000</span>
+        <span class="hud-sep">|</span>
+        <span id="hud-speed">VEL: 000 mph</span>
+        <span class="hud-sep">|</span>
+        <span id="hud-time">TIME 00:00:00</span>
+    </div>
+
+    <!-- HUD extras (combo, health, debug) -->
     <div id="hud">
-        <div id="hud-speed">0 <span>km/h</span></div>
-        <div id="hud-score">SCORE: 0</div>
         <div id="hud-combo" class="hidden"></div>
         <div id="hud-health-bar"><div id="hud-health-fill"></div></div>
-        <div id="hud-time">08:00 DAY</div>
         <div id="hud-debug-wrapper">
             <div id="hud-fluid">FLUID: 100</div>
             <button id="btn-slowmo">SLOW MO</button>

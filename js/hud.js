@@ -17,6 +17,9 @@ export class HUD {
         this._healthBarEl = document.getElementById('hud-health-bar');
         this._healthFillEl = document.getElementById('hud-health-fill');
         this._fluidEl = document.getElementById('hud-fluid');
+
+        // Elapsed game time tracker
+        this._elapsed = 0;
         this._debugCollapsed = false;
 
         this._renderer = renderer;
@@ -196,16 +199,23 @@ export class HUD {
     }
 
     update(dt, speedKmh, timeStr, phaseName, debugInfo, health, washerFluid) {
+        this._elapsed += dt;
+
         if (this._speedEl) {
-            this._speedEl.innerHTML = `${speedKmh} <span>km/h</span>`;
+            const mph = Math.round(speedKmh * 0.621371);
+            this._speedEl.textContent = `VEL: ${String(mph).padStart(3, '0')} mph`;
         }
 
         if (this._scoreEl) {
-            this._scoreEl.textContent = `SCORE: ${this.score}`;
+            this._scoreEl.textContent = `SCORE: ${String(this.score).padStart(6, '0')}`;
         }
 
-        if (this._timeEl && timeStr) {
-            this._timeEl.textContent = `${timeStr} ${phaseName}`;
+        if (this._timeEl) {
+            const totalSec = Math.floor(this._elapsed);
+            const h = String(Math.floor(totalSec / 3600)).padStart(2, '0');
+            const m = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
+            const s = String(totalSec % 60).padStart(2, '0');
+            this._timeEl.textContent = `TIME ${h}:${m}:${s}`;
         }
 
         // Health bar
