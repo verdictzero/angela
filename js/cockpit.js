@@ -3,6 +3,9 @@
  *
  * Dashboard and steering wheel as textured planes attached to the camera.
  * Both layers track together with the same parallax sway on steering.
+ *
+ * Blood splatters render on an offscreen canvas → CanvasTexture on a plane
+ * at renderOrder 98 so they appear behind the dashboard and steering wheel.
  */
 
 import * as THREE from 'three';
@@ -32,6 +35,19 @@ const SWAY_AMOUNT = 0.15;
 const SWAY_SPEED = 6;
 const COCKPIT_PARALLAX = 0.7;  // same for dash and wheel — they track together
 
+// ── Blood splatter pool ──────────────────────────────────────
+const MAX_SPLATTERS = 64;
+const BLOOD_IMAGES = [
+    'assets/blood_spatter/blood_0.png',
+    'assets/blood_spatter/blood_1.png',
+    'assets/blood_spatter/blood_2.png',
+    'assets/blood_spatter/blood_3.png',
+    'assets/blood_spatter/blood_4.png',
+    'assets/blood_spatter/blood_5.png',
+];
+
+function _rng(min, max) { return min + Math.random() * (max - min); }
+
 export class Cockpit {
     constructor(camera) {
         this.camera = camera;
@@ -53,10 +69,133 @@ export class Cockpit {
         this._wheelBaseX = 0;
         this._wheelBaseY = 0;
 
+        // Wiper state
+        this.wipersActive = false;
+        this.wiperAngle = 0;        // 0 to ~120 degrees
+        this.wiperDirection = 1;     // +1 sweep right, -1 sweep left
+        this._prevWipers = false;    // edge detection
+
+        // Washer fluid
+        this.washerFluid = 100;      // 0-100
+        this.washerSpraying = false;
+
+        // ── Blood splatter system (offscreen canvas → Three.js plane) ──
+        this._initBloodSystem();
+
         this._loadImages();
         this._buildHeadlights();
 
-        window.addEventListener('resize', () => this._updateLayout());
+        window.addEventListener('resize', () => {
+            this._updateLayout();
+            this._resizeBloodCanvas();
+        });
+    }
+
+    // ── Blood System Init ─────────────────────────────────────
+
+    _initBloodSystem() {
+        // Offscreen canvas at half resolution
+        this._bloodCanvas = document.createElement('canvas');
+        this._bloodCanvas.width = Math.max(1, Math.floor(window.innerWidth / 2));
+        this._bloodCanvas.height = Math.max(1, Math.floor(window.innerHeight / 2));
+        this._bloodCtx = this._bloodCanvas.getContext('2d');
+
+        // Three.js texture from canvas
+        this._bloodTexture = new THREE.CanvasTexture(this._bloodCanvas);
+        this._bloodTexture.magFilter = THREE.LinearFilter;
+        this._bloodTexture.minFilter = THREE.LinearFilter;
+
+        // Simple passthrough shader — no fog/tint/headlight influence
+        const bloodMat = new THREE.ShaderMaterial({
+            uniforms: {
+                bloodMap: { value: this._bloodTexture },
+            },
+            vertexShader: `
+                varying vec2 vUv;
+                void main() {
+                    vUv = uv;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                uniform sampler2D bloodMap;
+                varying vec2 vUv;
+                void main() {
+                    gl_FragColor = texture2D(bloodMap, vUv);
+                }
+            `,
+            transparent: true,
+            depthTest: false,
+            depthWrite: false,
+            toneMapped: false,
+            side: THREE.FrontSide,
+        });
+
+        this.bloodMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), bloodMat);
+        this.bloodMesh.renderOrder = 98;
+        this.bloodMesh.position.z = DASH_Z;
+        this.group.add(this.bloodMesh);
+
+        // Splatter pool
+        this._splatters = [];
+        for (let i = 0; i < MAX_SPLATTERS; i++) {
+            this._splatters.push(this._createSplatter());
+        }
+
+        this._bloodDirty = false;
+        this._anyDripping = false;
+
+        // Load blood spatter images
+        this._bloodImages = [];
+        this._bloodImagesReady = false;
+        let loaded = 0;
+        for (const src of BLOOD_IMAGES) {
+            const img = new Image();
+            img.onload = () => {
+                loaded++;
+                if (loaded === BLOOD_IMAGES.length) this._bloodImagesReady = true;
+            };
+            img.src = src;
+            this._bloodImages.push(img);
+        }
+    }
+
+    _createSplatter() {
+        return {
+            active: false,
+            x: 0, y: 0,
+            velocityY: 0,
+            imageIndex: 0,
+            rotation: 0,
+            size: 0,
+            age: 0,
+            opacity: 1.0,
+            dripping: false,
+            dripDelay: 0,
+        };
+    }
+
+    _acquireSplatter() {
+        // Find first inactive
+        for (let i = 0; i < MAX_SPLATTERS; i++) {
+            if (!this._splatters[i].active) return this._splatters[i];
+        }
+        // Recycle oldest (lowest index that's active — pool is roughly FIFO)
+        let oldest = 0;
+        let oldestAge = -1;
+        for (let i = 0; i < MAX_SPLATTERS; i++) {
+            if (this._splatters[i].age > oldestAge) {
+                oldestAge = this._splatters[i].age;
+                oldest = i;
+            }
+        }
+        return this._splatters[oldest];
+    }
+
+    _resizeBloodCanvas() {
+        this._bloodCanvas.width = Math.max(1, Math.floor(window.innerWidth / 2));
+        this._bloodCanvas.height = Math.max(1, Math.floor(window.innerHeight / 2));
+        this._bloodDirty = true;
     }
 
     // ── Image Loading ────────────────────────────────────────
@@ -191,6 +330,11 @@ export class Cockpit {
             this.wheelMesh.position.x = this._wheelBaseX;
             this.wheelMesh.position.y = this._wheelBaseY;
         }
+
+        // ── Blood plane — fill viewport at DASH_Z, padded for sway
+        if (this.bloodMesh) {
+            this.bloodMesh.scale.set(dashW, visH_dash * DASH_WIDTH_PAD, 1);
+        }
     }
 
     // ── Headlights ───────────────────────────────────────────
@@ -214,9 +358,182 @@ export class Cockpit {
         this._headlightR.intensity = intensity;
     }
 
+    // ── Blood Splatter (raster image stamps) ───────────────────
+
+    addBloodSplatter(intensity) {
+        if (!this._bloodImagesReady) return;
+
+        const count = Math.floor(2 + intensity * 3);
+        for (let i = 0; i < count; i++) {
+            const s = this._acquireSplatter();
+
+            s.active = true;
+            s.x = Math.random();
+            s.y = _rng(0.05, 0.75);
+            s.velocityY = 0;
+            s.age = 0;
+            s.opacity = _rng(0.7, 1.0);
+            s.size = _rng(0.08, 0.18) + intensity * _rng(0.04, 0.08);
+            s.imageIndex = Math.floor(Math.random() * this._bloodImages.length);
+            s.rotation = Math.random() * Math.PI * 2;
+            s.dripping = false;
+            s.dripDelay = _rng(0.5, 3.0);
+        }
+
+        this._bloodDirty = true;
+    }
+
+    // ── Canvas Drawing ────────────────────────────────────────
+
+    _redrawBloodCanvas() {
+        const ctx = this._bloodCtx;
+        const w = this._bloodCanvas.width;
+        const h = this._bloodCanvas.height;
+        ctx.clearRect(0, 0, w, h);
+
+        for (let i = 0; i < MAX_SPLATTERS; i++) {
+            const s = this._splatters[i];
+            if (!s.active) continue;
+            this._drawSplatter(ctx, s, w, h);
+        }
+
+        this._bloodTexture.needsUpdate = true;
+    }
+
+    _drawSplatter(ctx, s, w, h) {
+        const img = this._bloodImages[s.imageIndex];
+        if (!img || !img.complete) return;
+
+        const cx = s.x * w;
+        const cy = s.y * h;
+        const drawSize = s.size * Math.max(w, h);
+
+        ctx.save();
+        ctx.globalAlpha = s.opacity;
+        ctx.translate(cx, cy);
+        ctx.rotate(s.rotation);
+        ctx.drawImage(img, -drawSize / 2, -drawSize / 2, drawSize, drawSize);
+        ctx.restore();
+    }
+
+    // ── Blood Drip Animation ──────────────────────────────────
+
+    _updateBloodSplatters(dt) {
+        this._anyDripping = false;
+        for (let i = 0; i < MAX_SPLATTERS; i++) {
+            const s = this._splatters[i];
+            if (!s.active) continue;
+
+            s.age += dt;
+
+            // Start dripping after delay
+            if (!s.dripping && s.age > s.dripDelay) {
+                s.dripping = true;
+                s.velocityY = _rng(0.002, 0.008);
+            }
+
+            if (s.dripping) {
+                // Accelerate slowly (viscous fluid), cap speed
+                s.velocityY = Math.min(s.velocityY + 0.001 * dt, 0.02);
+                s.y += s.velocityY * dt;
+
+                // Thin out as it slides
+                s.opacity = Math.max(0.1, s.opacity - 0.015 * dt);
+
+                this._anyDripping = true;
+                this._bloodDirty = true;
+            }
+
+            // Off-screen bottom — deactivate
+            if (s.y > 1.3) {
+                s.active = false;
+                this._bloodDirty = true;
+            }
+        }
+    }
+
+    // ── Windshield / Wipers ───────────────────────────────────
+
+    _updateWindshield(dt, input) {
+        if (!input) return;
+
+        // Washer fluid
+        this.washerSpraying = input.washer && this.washerFluid > 0;
+        if (this.washerSpraying) {
+            this.washerFluid = Math.max(0, this.washerFluid - 20 * dt);
+        }
+
+        // Sync wiper state from input toggle
+        this.wipersActive = input.wipers;
+
+        // Wiper sweep
+        if (this.wipersActive) {
+            const sweepSpeed = 90; // degrees per second
+            this.wiperAngle += this.wiperDirection * sweepSpeed * dt;
+
+            if (this.wiperAngle >= 120) {
+                this.wiperAngle = 120;
+                this.wiperDirection = -1;
+            } else if (this.wiperAngle <= 0) {
+                this.wiperAngle = 0;
+                this.wiperDirection = 1;
+            }
+
+            this._applyWiperClear(dt);
+        }
+
+        // Update drip animation
+        this._updateBloodSplatters(dt);
+
+        // Redraw canvas only when dirty
+        if (this._bloodDirty) {
+            this._redrawBloodCanvas();
+            this._bloodDirty = false;
+        }
+    }
+
+    _applyWiperClear(dt) {
+        const pivotX = 0.5;
+        const pivotY = 1.1;
+        const wiperLength = 1.2;
+
+        const angleRad = (-60 + this.wiperAngle) * Math.PI / 180;
+        const sweepWidth = 8; // degrees
+
+        const startAngle = angleRad - (sweepWidth * Math.PI / 180) - Math.PI / 2;
+        const endAngle = angleRad + (sweepWidth * Math.PI / 180) - Math.PI / 2;
+
+        const fadeRate = this.washerSpraying ? 3.0 : 0.45;
+
+        for (let i = 0; i < MAX_SPLATTERS; i++) {
+            const s = this._splatters[i];
+            if (!s.active) continue;
+
+            const dx = s.x - pivotX;
+            const dy = s.y - pivotY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist > wiperLength) continue;
+
+            const angle = Math.atan2(dy, dx);
+
+            // Normalize angle check — handle wrap-around
+            let a = angle;
+            if (a < startAngle - Math.PI) a += Math.PI * 2;
+            if (a > endAngle + Math.PI) a -= Math.PI * 2;
+
+            if (a >= startAngle && a <= endAngle) {
+                s.opacity -= fadeRate * dt;
+                if (s.opacity <= 0) {
+                    s.active = false;
+                }
+                this._bloodDirty = true;
+            }
+        }
+    }
+
     // ── Per-Frame Update ─────────────────────────────────────
 
-    update(dt, vehicle) {
+    update(dt, vehicle, input) {
         // Sway — same parallax for dash and wheel so they track together
         const swayTarget = vehicle.steerAngle * SWAY_AMOUNT;
         this.swayX = lerp(this.swayX, swayTarget, SWAY_SPEED * dt);
@@ -238,6 +555,14 @@ export class Cockpit {
             this.wheelCurrentAngle = lerp(this.wheelCurrentAngle, wheelTarget, 12 * dt);
             this.wheelMesh.rotation.z = this.wheelCurrentAngle;
         }
+
+        // Blood plane tracks sway with cockpit
+        if (this.bloodMesh) {
+            this.bloodMesh.position.x = this._dashBaseX + sway;
+        }
+
+        // Windshield blood + wipers
+        this._updateWindshield(dt, input);
     }
 }
 

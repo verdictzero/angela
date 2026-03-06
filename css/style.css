@@ -240,6 +240,36 @@ body {
     color: #aaccee;
 }
 
+/* Slow Mo Button */
+#btn-slowmo {
+    display: block;
+    pointer-events: auto;
+    cursor: pointer;
+    font-family: 'Courier New', monospace;
+    font-size: 0.65rem;
+    color: #88aacc;
+    background: rgba(0, 0, 0, 0.45);
+    border: 1px solid rgba(136, 170, 204, 0.3);
+    border-radius: 3px;
+    padding: 2px 8px;
+    letter-spacing: 0.08em;
+    opacity: 0.85;
+    margin-bottom: 4px;
+    transition: background 0.2s, color 0.2s, border-color 0.2s, text-shadow 0.2s;
+}
+
+#btn-slowmo:hover {
+    background: rgba(0, 0, 0, 0.65);
+    color: #aaccee;
+}
+
+#btn-slowmo.active {
+    color: #ff6622;
+    border-color: rgba(255, 100, 30, 0.6);
+    text-shadow: 0 0 6px rgba(255, 80, 0, 0.5);
+    background: rgba(80, 20, 0, 0.5);
+}
+
 /* Debug Panel */
 #hud-debug {
     font-size: 0.72rem;
@@ -263,6 +293,36 @@ body {
     opacity: 0;
     padding-top: 0;
     padding-bottom: 0;
+}
+
+/* Health Bar */
+#hud-health-bar {
+    position: fixed;
+    top: 140px;
+    right: 30px;
+    width: 150px;
+    height: 12px;
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 50, 50, 0.4);
+    border-radius: 2px;
+}
+
+#hud-health-fill {
+    width: 100%;
+    height: 100%;
+    background: #cc0000;
+    box-shadow: 0 0 6px rgba(255, 0, 0, 0.5);
+    transition: width 0.3s ease;
+}
+
+/* Washer Fluid Indicator */
+#hud-fluid {
+    font-size: 0.65rem;
+    color: #66aadd;
+    text-shadow: 0 0 4px rgba(80, 150, 220, 0.4);
+    letter-spacing: 0.06em;
+    margin-bottom: 4px;
+    opacity: 0.85;
 }
 
 /* Blood Overlay */

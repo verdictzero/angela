@@ -8,9 +8,9 @@
 import * as THREE from 'three';
 import { clamp, lerp } from './utils.js';
 
-const MAX_SPEED = 50;           // m/s (~180 km/h)
-const BOOST_MAX_SPEED = 70;     // m/s (~250 km/h)
-const ACCELERATION = 18;        // m/s^2
+const MAX_SPEED = 100;          // m/s (~360 km/h)
+const BOOST_MAX_SPEED = 140;    // m/s (~504 km/h)
+const ACCELERATION = 24;        // m/s^2
 const BRAKE_FORCE = 30;         // m/s^2
 const DRAG = 0.5;               // natural deceleration
 const HANDBRAKE_DRAG = 15;
@@ -26,6 +26,9 @@ export class Vehicle {
         this.speed = 0;             // forward speed (m/s)
         this.steerAngle = 0;       // current wheel angle
         this.velocity = new THREE.Vector3();
+
+        // Health
+        this.health = 100;
 
         // Shake
         this.shakeAmount = 0;
@@ -140,6 +143,17 @@ export class Vehicle {
         this.shakeAmount = Math.max(this.shakeAmount, intensity);
         // Slight speed reduction on impact
         this.speed *= 0.95;
+    }
+
+    /**
+     * Apply tree collision — hard stop, damage scaled by speed, big shake.
+     */
+    applyTreeImpact(speed) {
+        const absSpeed = Math.abs(speed);
+        const damage = 15 + (absSpeed / MAX_SPEED) * 10;
+        this.health = Math.max(0, this.health - damage);
+        this.speed *= 0.05; // near-zero hard stop
+        this.shakeAmount = Math.max(this.shakeAmount, 0.5);
     }
 
     getForward() {

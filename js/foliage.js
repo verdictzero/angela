@@ -78,6 +78,12 @@ function cellRng(cx, cz) {
     };
 }
 
+// Tree collision radii by tier name
+const TREE_COLLISION_RADIUS = { fir: 1.5, juvenile: 0.8 };
+
+// Tree tier texture prefixes for collision filtering
+const TREE_PREFIXES = ['fir_tree_', 'juvenile_fir_tree_'];
+
 export class FoliageManager {
     constructor(scene, road) {
         this.scene = scene;
@@ -86,6 +92,8 @@ export class FoliageManager {
         this._meshes = new Map();      // filename -> { mesh, material }
         this._cellData = new Map();    // "cx,cz" -> [{ texFile, x, y, z, w, h }]
         this._dirty = false;
+        this._recentTreeHits = new Set(); // track recently-hit tree keys
+        this._lastVehicleCell = null;
         this._loadTextures();
         this._createInstancedMeshes();
     }
@@ -218,6 +226,56 @@ export class FoliageManager {
         }
 
         this._dirty = false;
+    }
+
+    /**
+     * Check if the vehicle collides with any tree trunk.
+     * Returns { x, z } of first collision or null.
+     */
+    checkTreeCollision(vehiclePos, vehicleRadius) {
+        const cx = Math.floor(vehiclePos.x / CELL_SIZE);
+        const cz = Math.floor(vehiclePos.z / CELL_SIZE);
+
+        // Clear recently-hit set when vehicle moves to a different cell
+        const cellKey = `${cx},${cz}`;
+        if (this._lastVehicleCell !== cellKey) {
+            this._recentTreeHits.clear();
+            this._lastVehicleCell = cellKey;
+        }
+
+        // Check 3x3 grid of cells around vehicle
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dz = -1; dz <= 1; dz++) {
+                const key = `${cx + dx},${cz + dz}`;
+                const instances = this._cellData.get(key);
+                if (!instances) continue;
+
+                for (const inst of instances) {
+                    // Filter to tree tiers only
+                    const isTree = TREE_PREFIXES.some(p => inst.texFile.startsWith(p));
+                    if (!isTree) continue;
+
+                    // Determine collision radius based on tier
+                    const treeRadius = inst.texFile.startsWith('juvenile_fir_tree_')
+                        ? TREE_COLLISION_RADIUS.juvenile
+                        : TREE_COLLISION_RADIUS.fir;
+
+                    const ddx = vehiclePos.x - inst.x;
+                    const ddz = vehiclePos.z - inst.z;
+                    const dist = Math.sqrt(ddx * ddx + ddz * ddz);
+                    const combinedRadius = vehicleRadius + treeRadius;
+
+                    if (dist < combinedRadius) {
+                        const treeKey = `${inst.x},${inst.z}`;
+                        if (this._recentTreeHits.has(treeKey)) continue;
+                        this._recentTreeHits.add(treeKey);
+                        return { x: inst.x, z: inst.z };
+                    }
+                }
+            }
+        }
+
+        return null;
     }
 
     /**

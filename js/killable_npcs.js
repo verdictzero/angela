@@ -20,14 +20,19 @@ const MOPED_SPEED_MAX = 12;         // m/s (~43 km/h)
 const MOPED_HEIGHT = 2.2;
 const MOPED_WIDTH = MOPED_HEIGHT * 0.4;  // maintain source image aspect ratio (250x625)
 
+const STATIC_NPC_SPAWN_CHANCE = 0.08;  // ~8% chance per spawn slot
+const STATIC_NPC_HEIGHT = 2.25;
+const STATIC_NPC_WIDTH = STATIC_NPC_HEIGHT * 0.5;
+
 // Reusable math objects
 const _identityQuat = new THREE.Quaternion();
 const _oneScale = new THREE.Vector3(1, 1, 1);
 const _matrix = new THREE.Matrix4();
 const _camDir = new THREE.Vector3();
 
-// Shared texture — loaded once
+// Shared textures — loaded once
 let mopedTexture = null;
+let staticNpcTexture = null;
 
 function getMopedTexture() {
     if (!mopedTexture) {
@@ -37,6 +42,16 @@ function getMopedTexture() {
         mopedTexture.minFilter = THREE.NearestFilter;
     }
     return mopedTexture;
+}
+
+function getStaticNpcTexture() {
+    if (!staticNpcTexture) {
+        staticNpcTexture = new THREE.TextureLoader().load('assets/static_npc_1.png');
+        staticNpcTexture.colorSpace = THREE.SRGBColorSpace;
+        staticNpcTexture.magFilter = THREE.NearestFilter;
+        staticNpcTexture.minFilter = THREE.NearestFilter;
+    }
+    return staticNpcTexture;
 }
 
 export class KillableNPCManager {
@@ -59,6 +74,22 @@ export class KillableNPCManager {
         this._mesh.count = 0;
         this._mesh.frustumCulled = false;
         this.scene.add(this._mesh);
+
+        // Static NPC InstancedMesh — separate texture, same billboard approach
+        const staticGeo = new THREE.PlaneGeometry(STATIC_NPC_WIDTH, STATIC_NPC_HEIGHT);
+        staticGeo.translate(0, STATIC_NPC_HEIGHT / 2, 0);
+
+        this._staticMaterial = createUnlitMaterial(getStaticNpcTexture(), {
+            transparent: true,
+            alphaTest: 0.1,
+            side: THREE.DoubleSide,
+            billboard: true,
+        });
+
+        this._staticMesh = new THREE.InstancedMesh(staticGeo, this._staticMaterial, MAX_NPCS);
+        this._staticMesh.count = 0;
+        this._staticMesh.frustumCulled = false;
+        this.scene.add(this._staticMesh);
     }
 
     /**
@@ -72,6 +103,9 @@ export class KillableNPCManager {
             // Only spawn on road (not sidewalks)
             if (spawn.type !== 'road') continue;
 
+            // Rarely spawn a static NPC instead of a moped
+            const isStatic = Math.random() < STATIC_NPC_SPAWN_CHANCE;
+
             const npc = {
                 position: new THREE.Vector3(
                     spawn.position.x,
@@ -79,10 +113,11 @@ export class KillableNPCManager {
                     spawn.position.z
                 ),
                 alive: true,
-                speed: randomRange(MOPED_SPEED_MIN, MOPED_SPEED_MAX),
+                speed: isStatic ? 0 : randomRange(MOPED_SPEED_MIN, MOPED_SPEED_MAX),
                 roadIndex: spawn.roadIndex,
                 lateralOffset: spawn.lateralOffset || 0,
                 distAccum: 0,
+                isStatic,
             };
 
             this.npcs.push(npc);
@@ -101,37 +136,40 @@ export class KillableNPCManager {
             const m = this.npcs[i];
             if (!m.alive) continue;
 
-            // Advance along road spine
-            const dist = m.speed * dt;
-            m.distAccum += dist;
+            // Static NPCs don't move — skip road following
+            if (!m.isStatic) {
+                // Advance along road spine
+                const dist = m.speed * dt;
+                m.distAccum += dist;
 
-            // Move to next road point(s) when accumulated distance exceeds spacing
-            while (m.distAccum >= pointSpacing && m.roadIndex < maxIdx) {
-                m.distAccum -= pointSpacing;
-                m.roadIndex++;
+                // Move to next road point(s) when accumulated distance exceeds spacing
+                while (m.distAccum >= pointSpacing && m.roadIndex < maxIdx) {
+                    m.distAccum -= pointSpacing;
+                    m.roadIndex++;
+                }
+
+                // Clamp to valid range
+                if (m.roadIndex >= maxIdx) {
+                    this._removeNPC(i);
+                    continue;
+                }
+
+                // Interpolate position between current and next road point
+                const ptA = roadPoints[m.roadIndex];
+                const ptB = roadPoints[Math.min(m.roadIndex + 1, maxIdx)];
+                const t = m.distAccum / pointSpacing;
+
+                const cx = ptA.position.x + (ptB.position.x - ptA.position.x) * t;
+                const cz = ptA.position.z + (ptB.position.z - ptA.position.z) * t;
+
+                // Apply lateral offset using interpolated right vector
+                const rx = ptA.right.x + (ptB.right.x - ptA.right.x) * t;
+                const rz = ptA.right.z + (ptB.right.z - ptA.right.z) * t;
+
+                m.position.x = cx + rx * m.lateralOffset;
+                m.position.y = 0;
+                m.position.z = cz + rz * m.lateralOffset;
             }
-
-            // Clamp to valid range
-            if (m.roadIndex >= maxIdx) {
-                this._removeNPC(i);
-                continue;
-            }
-
-            // Interpolate position between current and next road point
-            const ptA = roadPoints[m.roadIndex];
-            const ptB = roadPoints[Math.min(m.roadIndex + 1, maxIdx)];
-            const t = m.distAccum / pointSpacing;
-
-            const cx = ptA.position.x + (ptB.position.x - ptA.position.x) * t;
-            const cz = ptA.position.z + (ptB.position.z - ptA.position.z) * t;
-
-            // Apply lateral offset using interpolated right vector
-            const rx = ptA.right.x + (ptB.right.x - ptA.right.x) * t;
-            const rz = ptA.right.z + (ptB.right.z - ptA.right.z) * t;
-
-            m.position.x = cx + rx * m.lateralOffset;
-            m.position.y = 0;
-            m.position.z = cz + rz * m.lateralOffset;
 
             // Despawn if too far behind player
             const dx = vehiclePos.x - m.position.x;
@@ -145,21 +183,34 @@ export class KillableNPCManager {
             }
         }
 
-        // Rebuild instance matrices
-        let count = 0;
+        // Rebuild instance matrices — separate meshes for moped vs static
+        let mopedCount = 0;
+        let staticCount = 0;
         for (const npc of this.npcs) {
-            _matrix.compose(npc.position, _identityQuat, _oneScale);
-            this._mesh.setMatrixAt(count, _matrix);
-            count++;
+            if (npc.isStatic) {
+                _matrix.compose(npc.position, _identityQuat, _oneScale);
+                this._staticMesh.setMatrixAt(staticCount, _matrix);
+                staticCount++;
+            } else {
+                _matrix.compose(npc.position, _identityQuat, _oneScale);
+                this._mesh.setMatrixAt(mopedCount, _matrix);
+                mopedCount++;
+            }
         }
-        this._mesh.count = count;
-        if (count > 0) {
+        this._mesh.count = mopedCount;
+        if (mopedCount > 0) {
             this._mesh.instanceMatrix.needsUpdate = true;
         }
+        this._staticMesh.count = staticCount;
+        if (staticCount > 0) {
+            this._staticMesh.instanceMatrix.needsUpdate = true;
+        }
 
-        // Billboard uniform
+        // Billboard uniform — both meshes
         const dir = camera.getWorldDirection(_camDir);
-        this._material.uniforms.billboardRotY.value = Math.atan2(dir.x, -dir.z);
+        const rotY = Math.atan2(dir.x, -dir.z);
+        this._material.uniforms.billboardRotY.value = rotY;
+        this._staticMaterial.uniforms.billboardRotY.value = rotY;
     }
 
     /**
