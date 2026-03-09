@@ -176,6 +176,16 @@ body {
     pointer-events: none;
 }
 
+/* HUD groups — vehicle stats (left) and score info (right) */
+.hud-group {
+    display: flex;
+    flex: 1 1 0;
+}
+
+.hud-group-score {
+    border-left: 3px solid #555;
+}
+
 /* Each slot is a flex-equal container; text centered inside */
 .hud-slot {
     flex: 1 1 0;
@@ -184,18 +194,10 @@ body {
     justify-content: center;
     padding: 7px 0;
     white-space: nowrap;
-    border-right: 1px solid #0a1a0a;
+    border-right: 2px solid #444;
 }
 
 .hud-slot:last-child {
-    border-right: none;
-}
-
-/* Separator slot — thicker divider between vehicle & score sections */
-.hud-slot-sep {
-    flex: 0 0 2px;
-    padding: 0;
-    background: #0a3a0a;
     border-right: none;
 }
 
@@ -331,8 +333,16 @@ body {
         font-size: 0.7rem;
     }
 
+    .hud-group {
+        flex: 1 1 100%;
+    }
+
+    .hud-group-score {
+        border-left: none;
+        border-top: 2px solid #444;
+    }
+
     .hud-slot {
-        flex: 0 0 25%;
         padding: 4px 0;
     }
 }

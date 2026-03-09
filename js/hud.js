@@ -6,12 +6,12 @@
  */
 
 // Fake 7-speed auto transmission: gear speed thresholds in m/s
-// Shift points roughly: 0, 8, 18, 32, 48, 65, 82 m/s
-const GEAR_SHIFTS = [0, 8, 18, 32, 48, 65, 82];
+// Spread across achievable speed range (~48 m/s terminal velocity)
+const GEAR_SHIFTS = [0, 5, 11, 18, 26, 34, 42];
 const RPM_IDLE = 800;
 const RPM_REDLINE = 7200;
 
-function getGearAndRPM(speedMs) {
+export function getGearAndRPM(speedMs) {
     const absSpeed = Math.abs(speedMs);
 
     // Find current gear (highest gear whose threshold we've passed)

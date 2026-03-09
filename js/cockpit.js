@@ -11,6 +11,7 @@
 import * as THREE from 'three';
 import { lerp } from './utils.js';
 import { createUnlitMaterial } from './shaders.js';
+import { getGearAndRPM } from './hud.js';
 
 // LHD driver offset — used by main.js for camera positioning
 const DRIVER_X = -0.35;
@@ -34,6 +35,10 @@ const WHEEL_SIZE_FRAC = 1.70;  // wheel height as fraction of dash height (2x)
 const SWAY_AMOUNT = 0.15;
 const SWAY_SPEED = 6;
 const COCKPIT_PARALLAX = 0.7;  // same for dash and wheel — they track together
+
+// ── Shift shock (vertical jolt on gear change) ──────────────
+const SHIFT_SHOCK_AMOUNT = 0.04;  // initial vertical offset
+const SHIFT_SHOCK_DECAY = 8;      // how fast it settles back
 
 // ── Blood splatter pool ──────────────────────────────────────
 const MAX_SPLATTERS = 64;
@@ -62,10 +67,14 @@ export class Cockpit {
         this.wheelAspect = 1.0;
 
         this.swayX = 0;
+        this.shiftShockY = 0;
+        this._lastGear = 1;
         this.wheelCurrentAngle = 0;
 
         // Base positions (set in _updateLayout, sway added in update)
         this._dashBaseX = 0;
+        this._dashBaseY = 0;
+        this._underDashBaseY = 0;
         this._wheelBaseX = 0;
         this._wheelBaseY = 0;
 
@@ -289,14 +298,21 @@ export class Cockpit {
         const visW_dash = visH_dash * aspect;
 
         // ── Dashboard — fill width (clamped so portrait doesn't squish)
+        // Also guarantee the dash bottom edge always reaches viewport bottom
         const effectiveAspect = Math.max(aspect, MIN_DASH_ASPECT);
         const dashW = (visH_dash * effectiveAspect) * DASH_WIDTH_PAD;
-        const dashH = dashW / this.dashAspect;
+        const naturalDashH = dashW / this.dashAspect;
+        // Dash top edge sits at -visH_dash/6; bottom must reach -visH_dash/2
+        const minDashH = visH_dash / 2 - (-visH_dash / 6); // = visH_dash/3
+        const dashH = Math.max(naturalDashH, minDashH);
+        // Scale width to match if we grew height
+        const finalDashW = dashH * this.dashAspect;
 
-        this.dashMesh.scale.set(dashW, dashH, 1);
+        this.dashMesh.scale.set(Math.max(dashW, finalDashW), dashH, 1);
         // Bottom third: top edge at -visH_dash/2 + visH_dash/3 = -visH_dash/6
         // Mesh center = topEdge - dashH/2
-        this.dashMesh.position.y = -visH_dash / 6 - dashH / 2;
+        this._dashBaseY = -visH_dash / 6 - dashH / 2;
+        this.dashMesh.position.y = this._dashBaseY;
         this._dashBaseX = 0;
 
         // Reset UVs to show full texture (no cropping)
@@ -315,7 +331,8 @@ export class Cockpit {
             const finalUdH = Math.max(udH, minUdH);
             const finalUdW = finalUdH * this.underDashAspect;
             this.underDashMesh.scale.set(Math.max(udW, finalUdW), finalUdH, 1);
-            this.underDashMesh.position.y = topY - finalUdH / 2;
+            this._underDashBaseY = topY - finalUdH / 2;
+            this.underDashMesh.position.y = this._underDashBaseY;
         }
 
         // ── Steering wheel — center on red + position
@@ -538,18 +555,31 @@ export class Cockpit {
         const swayTarget = vehicle.steerAngle * SWAY_AMOUNT;
         this.swayX = lerp(this.swayX, swayTarget, SWAY_SPEED * dt);
 
+        // Shift shock — detect gear changes
+        const speedMs = Math.abs(vehicle.speed || 0);
+        const { gear } = getGearAndRPM(speedMs);
+        if (gear !== this._lastGear && gear > this._lastGear) {
+            this.shiftShockY = -SHIFT_SHOCK_AMOUNT; // jolt downward
+        }
+        this._lastGear = gear;
+        this.shiftShockY = lerp(this.shiftShockY, 0, SHIFT_SHOCK_DECAY * dt);
+
         const sway = this.swayX * COCKPIT_PARALLAX;
+        const shockY = this.shiftShockY;
 
         if (this.dashMesh) {
             this.dashMesh.position.x = this._dashBaseX + sway;
+            this.dashMesh.position.y = this._dashBaseY + shockY;
         }
 
         if (this.underDashMesh) {
             this.underDashMesh.position.x = this._dashBaseX + sway;
+            this.underDashMesh.position.y = this._underDashBaseY + shockY;
         }
 
         if (this.wheelMesh) {
             this.wheelMesh.position.x = this._wheelBaseX + sway;
+            this.wheelMesh.position.y = this._wheelBaseY + shockY;
 
             const wheelTarget = -vehicle.steerAngle * 2.5;
             this.wheelCurrentAngle = lerp(this.wheelCurrentAngle, wheelTarget, 12 * dt);

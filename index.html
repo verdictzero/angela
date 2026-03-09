@@ -28,16 +28,19 @@
 
     <!-- HUD Bar — fixed 7-segment display console -->
     <div id="hud-bar">
-        <div class="hud-slot"><span id="hud-speed">VEL: 000 mph</span></div>
-        <div class="hud-slot"><span id="hud-tach">TACH: 0000/G0</span></div>
-        <div class="hud-slot"><span id="hud-hp">HP: 100/100</span></div>
-        <div class="hud-slot"><span id="hud-fluid">W_FLD: 100</span></div>
-        <div class="hud-slot"><span id="hud-fuel">FUEL: 100</span></div>
-        <div class="hud-slot"><span id="hud-time">TIME 00:00</span></div>
-        <div class="hud-slot hud-slot-sep"></div>
-        <div class="hud-slot"><span id="hud-mult" class="hud-amber">MULTx00</span></div>
-        <div class="hud-slot"><span id="hud-hit" class="hud-amber">+00000</span></div>
-        <div class="hud-slot"><span id="hud-score">SCORE: 000000</span></div>
+        <div class="hud-group hud-group-vehicle">
+            <div class="hud-slot"><span id="hud-speed">VEL: 000 mph</span></div>
+            <div class="hud-slot"><span id="hud-tach">TACH: 0000/G0</span></div>
+            <div class="hud-slot"><span id="hud-hp">HP: 100/100</span></div>
+            <div class="hud-slot"><span id="hud-fluid">W_FLD: 100</span></div>
+            <div class="hud-slot"><span id="hud-fuel">FUEL: 100</span></div>
+            <div class="hud-slot"><span id="hud-time">TIME 00:00</span></div>
+        </div>
+        <div class="hud-group hud-group-score">
+            <div class="hud-slot"><span id="hud-mult" class="hud-amber">MULTx00</span></div>
+            <div class="hud-slot"><span id="hud-hit" class="hud-amber">+00000</span></div>
+            <div class="hud-slot"><span id="hud-score">SCORE: 000000</span></div>
+        </div>
     </div>
 
     <!-- Touch Controls -->
