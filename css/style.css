@@ -176,29 +176,31 @@ body {
     pointer-events: none;
 }
 
-/* HUD groups — vehicle stats (left) and score info (right) */
-.hud-group {
+/* Each HUD row is a centered strip */
+.hud-row {
     display: flex;
-    flex: 1 1 0;
+    justify-content: center;
+    width: 100%;
 }
 
-.hud-group-score {
-    border-left: 3px solid #555;
+.hud-row-score {
+    border-top: 1px solid #0a2a0a;
 }
 
-/* Each slot is a flex-equal container; text centered inside */
+/* Gradient separator between slots: bright green → dark green → black (mirrored) */
+.hud-sep {
+    flex: 0 0 3px;
+    background: linear-gradient(to bottom, #000, #0a3a0a 30%, #0f0 50%, #0a3a0a 70%, #000);
+}
+
+/* Each slot: text centered with healthy padding */
 .hud-slot {
-    flex: 1 1 0;
+    flex: 0 1 auto;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 7px 0;
+    padding: 7px 16px;
     white-space: nowrap;
-    border-right: 2px solid #444;
-}
-
-.hud-slot:last-child {
-    border-right: none;
 }
 
 /* Colors */
@@ -333,16 +335,7 @@ body {
         font-size: 0.7rem;
     }
 
-    .hud-group {
-        flex: 1 1 100%;
-    }
-
-    .hud-group-score {
-        border-left: none;
-        border-top: 2px solid #444;
-    }
-
     .hud-slot {
-        padding: 4px 0;
+        padding: 4px 8px;
     }
 }
