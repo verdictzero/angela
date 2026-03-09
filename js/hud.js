@@ -49,6 +49,7 @@ export class HUD {
         this._fuelEl = document.getElementById('hud-fuel');
         this._multEl = document.getElementById('hud-mult');
         this._hitEl = document.getElementById('hud-hit');
+        this._shiftLightEl = document.getElementById('shift-light');
 
         this._fuel = 100; // percent
 
@@ -60,6 +61,9 @@ export class HUD {
         this._lastHitPoints = 0;
         this._hitTimer = 0;
         this._hitDisplayTime = 1.5;
+
+        // Tach flash timer
+        this._tachFlashTimer = 0;
     }
 
     addKill(points = 100) {
@@ -90,7 +94,37 @@ export class HUD {
             const overrideGear = (vehicle && vehicle.manualMode) ? vehicle.currentGear : undefined;
             const { gear, rpm } = getGearAndRPM(speedMs, overrideGear);
             const modeChar = (vehicle && vehicle.manualMode) ? 'M' : 'A';
-            this._tachEl.textContent = `TACH: ${String(rpm).padStart(4, '0')}/${modeChar}${gear}`;
+
+            // Show STALL if engine is off
+            if (vehicle && !vehicle.engineRunning) {
+                this._tachEl.textContent = `TACH: STALL/${modeChar}${gear}`;
+            } else {
+                this._tachEl.textContent = `TACH: ${String(rpm).padStart(4, '0')}/${modeChar}${gear}`;
+            }
+
+            // Flash tach red on stall
+            if (vehicle && vehicle.engineStalled) {
+                this._tachFlashTimer = 0.6;
+            }
+
+            // Flash tach red on redline (RPM >= 7000)
+            if (vehicle && vehicle.engineRunning && rpm >= 7000) {
+                this._tachFlashTimer = Math.max(this._tachFlashTimer, 0.15);
+            }
+
+            // Apply/remove flash class
+            if (this._tachFlashTimer > 0) {
+                this._tachFlashTimer -= dt;
+                this._tachEl.classList.add('tach-flash');
+            } else {
+                this._tachEl.classList.remove('tach-flash');
+            }
+
+            // Shift light — illuminate when RPM > 6200 and engine running
+            if (this._shiftLightEl) {
+                const shiftLightOn = vehicle && vehicle.engineRunning && rpm > 6200;
+                this._shiftLightEl.className = shiftLightOn ? 'shift-light-on' : 'shift-light-off';
+            }
         }
 
         // Score

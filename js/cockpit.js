@@ -37,7 +37,7 @@ const SWAY_SPEED = 6;
 const COCKPIT_PARALLAX = 0.7;  // same for dash and wheel — they track together
 
 // ── Shift shock (vertical jolt on gear change) ──────────────
-const SHIFT_SHOCK_AMOUNT = 0.12;  // initial vertical offset
+const SHIFT_SHOCK_AMOUNT = 0.06;  // initial vertical offset (halved)
 const SHIFT_SHOCK_DECAY = 6;      // how fast it settles back
 
 // ── Blood splatter pool ──────────────────────────────────────
