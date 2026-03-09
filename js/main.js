@@ -233,6 +233,15 @@ function gameLoop() {
     // Update input
     input.update(dt);
 
+    // Process transmission controls
+    if (input.toggleTransmission) {
+        vehicle.toggleTransmission();
+        const btn = document.getElementById('btn-trans-mode');
+        if (btn) btn.textContent = vehicle.manualMode ? 'MAN' : 'AUTO';
+    }
+    if (input.shiftUp) vehicle.shiftUp();
+    if (input.shiftDown) vehicle.shiftDown();
+
     // Get road info at vehicle position
     const roadInfo = road.getRoadInfoAt(vehicle.position);
 
@@ -325,7 +334,7 @@ function gameLoop() {
         pixelRatioNative: window.devicePixelRatio,
         canvasWidth: renderer.domElement.width,
         canvasHeight: renderer.domElement.height,
-    }, vehicle.health, cockpit.washerFluid);
+    }, vehicle.health, cockpit.washerFluid, vehicle);
 }
 
 function updateCamera(dt) {

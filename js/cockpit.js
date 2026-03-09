@@ -37,8 +37,8 @@ const SWAY_SPEED = 6;
 const COCKPIT_PARALLAX = 0.7;  // same for dash and wheel — they track together
 
 // ── Shift shock (vertical jolt on gear change) ──────────────
-const SHIFT_SHOCK_AMOUNT = 0.04;  // initial vertical offset
-const SHIFT_SHOCK_DECAY = 8;      // how fast it settles back
+const SHIFT_SHOCK_AMOUNT = 0.12;  // initial vertical offset
+const SHIFT_SHOCK_DECAY = 6;      // how fast it settles back
 
 // ── Blood splatter pool ──────────────────────────────────────
 const MAX_SPLATTERS = 64;
@@ -557,8 +557,9 @@ export class Cockpit {
 
         // Shift shock — detect gear changes
         const speedMs = Math.abs(vehicle.speed || 0);
-        const { gear } = getGearAndRPM(speedMs);
-        if (gear !== this._lastGear && gear > this._lastGear) {
+        const overrideGear = vehicle.manualMode ? vehicle.currentGear : undefined;
+        const { gear } = getGearAndRPM(speedMs, overrideGear);
+        if (gear !== this._lastGear) {
             this.shiftShockY = -SHIFT_SHOCK_AMOUNT; // jolt downward
         }
         this._lastGear = gear;

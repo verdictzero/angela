@@ -6,27 +6,33 @@
  */
 
 // Fake 7-speed auto transmission: gear speed thresholds in m/s
-// Spread across achievable speed range (~48 m/s terminal velocity)
-const GEAR_SHIFTS = [0, 5, 11, 18, 26, 34, 42];
+// Spread across achievable speed range (~96 m/s terminal velocity)
+const GEAR_SHIFTS = [0, 8, 18, 30, 45, 62, 80];
 const RPM_IDLE = 800;
 const RPM_REDLINE = 7200;
 
-export function getGearAndRPM(speedMs) {
+export function getGearAndRPM(speedMs, overrideGear) {
     const absSpeed = Math.abs(speedMs);
 
-    // Find current gear (highest gear whose threshold we've passed)
-    let gear = 1;
-    for (let i = GEAR_SHIFTS.length - 1; i >= 1; i--) {
-        if (absSpeed >= GEAR_SHIFTS[i]) {
-            gear = i + 1;
-            break;
+    // Use override gear (manual mode) or compute from speed (auto)
+    let gear;
+    if (overrideGear !== undefined) {
+        gear = overrideGear;
+    } else {
+        gear = 1;
+        for (let i = GEAR_SHIFTS.length - 1; i >= 1; i--) {
+            if (absSpeed >= GEAR_SHIFTS[i]) {
+                gear = i + 1;
+                break;
+            }
         }
     }
 
     // RPM: interpolate between shift points
-    const lo = GEAR_SHIFTS[gear - 1];
+    const lo = GEAR_SHIFTS[gear - 1] || 0;
     const hi = gear < GEAR_SHIFTS.length ? GEAR_SHIFTS[gear] : GEAR_SHIFTS[gear - 1] + 30;
-    const t = Math.min((absSpeed - lo) / (hi - lo), 1.0);
+    const range = hi - lo;
+    const t = range > 0 ? Math.min((absSpeed - lo) / range, 1.0) : 0;
     const rpm = RPM_IDLE + t * (RPM_REDLINE - RPM_IDLE);
 
     return { gear, rpm: Math.round(rpm) };
@@ -68,7 +74,7 @@ export class HUD {
         this._hitTimer = this._hitDisplayTime;
     }
 
-    update(dt, speedKmh, timeStr, phaseName, debugInfo, health, washerFluid) {
+    update(dt, speedKmh, timeStr, phaseName, debugInfo, health, washerFluid, vehicle) {
         // Fuel slowly depletes
         this._fuel = Math.max(0, this._fuel - dt * 0.03);
 
@@ -79,10 +85,12 @@ export class HUD {
             this._speedEl.textContent = `VEL: ${String(mph).padStart(3, '0')} mph`;
         }
 
-        // Tachometer
+        // Tachometer — use vehicle gear in manual mode
         if (this._tachEl) {
-            const { gear, rpm } = getGearAndRPM(speedMs);
-            this._tachEl.textContent = `TACH: ${String(rpm).padStart(4, '0')}/G${gear}`;
+            const overrideGear = (vehicle && vehicle.manualMode) ? vehicle.currentGear : undefined;
+            const { gear, rpm } = getGearAndRPM(speedMs, overrideGear);
+            const modeChar = (vehicle && vehicle.manualMode) ? 'M' : 'A';
+            this._tachEl.textContent = `TACH: ${String(rpm).padStart(4, '0')}/${modeChar}${gear}`;
         }
 
         // Score

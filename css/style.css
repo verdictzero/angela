@@ -166,19 +166,20 @@ body {
     width: 100%;
     z-index: 50;
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     background: #000;
     font-family: '7seg', 'Courier New', monospace;
-    font-size: 1rem;
+    font-size: clamp(0.6rem, 1.6vw, 1rem);
     color: #0f0;
     text-shadow: 0 0 6px rgba(0, 255, 0, 0.6);
     letter-spacing: 0.08em;
     pointer-events: none;
 }
 
-/* Each HUD row is a centered strip */
+/* Each HUD row wraps its slots to fit the screen width */
 .hud-row {
     display: flex;
+    flex-wrap: wrap;
     justify-content: center;
     width: 100%;
 }
@@ -190,6 +191,7 @@ body {
 /* Gradient separator between slots: bright green → dark green → black (mirrored) */
 .hud-sep {
     flex: 0 0 3px;
+    align-self: stretch;
     background: linear-gradient(to bottom, #000, #0a3a0a 30%, #0f0 50%, #0a3a0a 70%, #000);
 }
 
@@ -239,22 +241,36 @@ body {
     bottom: 0;
     left: 0;
     width: 100%;
-    height: 200px;
+    height: 220px;
     z-index: 60;
     pointer-events: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding: 0 15px 15px;
 }
 
 #touch-controls.hidden {
     display: none;
 }
 
+#touch-left {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    pointer-events: auto;
+}
+
+#touch-right {
+    display: flex;
+    gap: 10px;
+    pointer-events: auto;
+}
+
 #touch-steer {
-    position: absolute;
-    bottom: 20px;
-    left: 20px;
     width: 140px;
     height: 140px;
-    pointer-events: auto;
 }
 
 #joystick-base {
@@ -280,45 +296,83 @@ body {
 }
 
 #touch-pedals {
-    position: absolute;
-    bottom: 20px;
-    right: 20px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    pointer-events: auto;
+    gap: 8px;
 }
 
-#btn-gas, #btn-brake {
-    width: 100px;
-    height: 70px;
+#touch-shifter {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* Shared touch button base */
+.touch-btn {
+    width: 90px;
+    height: 56px;
     border: none;
-    border-radius: 12px;
+    border-radius: 10px;
     font-family: 'Courier New', monospace;
-    font-size: 1.1rem;
+    font-size: 0.85rem;
     font-weight: bold;
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
 }
 
-#btn-gas {
+.touch-btn-green {
     background: rgba(0, 180, 0, 0.4);
     color: #0f0;
     border: 2px solid rgba(0, 255, 0, 0.3);
 }
-
-#btn-gas:active, #btn-gas.pressed {
+.touch-btn-green:active, .touch-btn-green.pressed {
     background: rgba(0, 180, 0, 0.7);
 }
 
-#btn-brake {
+.touch-btn-red {
     background: rgba(180, 0, 0, 0.4);
     color: #f44;
     border: 2px solid rgba(255, 0, 0, 0.3);
 }
-
-#btn-brake:active, #btn-brake.pressed {
+.touch-btn-red:active, .touch-btn-red.pressed {
     background: rgba(180, 0, 0, 0.7);
+}
+
+.touch-btn-yellow {
+    background: rgba(180, 150, 0, 0.4);
+    color: #ff0;
+    border: 2px solid rgba(255, 220, 0, 0.3);
+}
+.touch-btn-yellow:active, .touch-btn-yellow.pressed {
+    background: rgba(180, 150, 0, 0.7);
+}
+
+.touch-btn-blue {
+    background: rgba(0, 80, 180, 0.4);
+    color: #4af;
+    border: 2px solid rgba(0, 150, 255, 0.3);
+    width: 140px;
+}
+.touch-btn-blue:active, .touch-btn-blue.pressed {
+    background: rgba(0, 80, 180, 0.7);
+}
+
+.touch-btn-white {
+    background: rgba(150, 150, 150, 0.3);
+    color: #ddd;
+    border: 2px solid rgba(200, 200, 200, 0.3);
+}
+.touch-btn-white:active, .touch-btn-white.pressed {
+    background: rgba(150, 150, 150, 0.6);
+}
+
+.touch-btn-cyan {
+    background: rgba(0, 150, 150, 0.4);
+    color: #0ff;
+    border: 2px solid rgba(0, 220, 220, 0.3);
+}
+.touch-btn-cyan:active, .touch-btn-cyan.pressed {
+    background: rgba(0, 150, 150, 0.7);
 }
 
 /* Responsive adjustments */
@@ -331,11 +385,11 @@ body {
         font-size: 1.8rem;
     }
 
-    #hud-bar {
-        font-size: 0.7rem;
-    }
-
     .hud-slot {
         padding: 4px 8px;
+    }
+
+    .hud-sep {
+        flex: 0 0 2px;
     }
 }
