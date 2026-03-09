@@ -216,6 +216,92 @@ body {
     text-shadow: none;
 }
 
+/* ── Engine Start Button ──────────────────────────── */
+#engine-start-btn {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 80;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 20px 40px;
+    background: rgba(0, 0, 0, 0.85);
+    border: 2px solid #cc0000;
+    border-radius: 8px;
+    cursor: pointer;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+#engine-start-btn span {
+    font-family: '7seg', 'Courier New', monospace;
+    font-size: 1.8rem;
+    color: #cc0000;
+    text-shadow: 0 0 10px #ff0000, 0 0 20px #880000;
+    letter-spacing: 0.2em;
+}
+
+#engine-start-btn .engine-start-key {
+    font-family: 'Courier New', monospace;
+    font-size: 0.7rem;
+    color: #666;
+    letter-spacing: 0.1em;
+}
+
+#engine-start-btn.hidden {
+    display: none;
+}
+
+/* ── Shift Light ─────────────────────────────────── */
+#shift-light {
+    position: fixed;
+    top: 60px;
+    right: 20px;
+    z-index: 55;
+    font-family: '7seg', 'Courier New', monospace;
+    font-size: clamp(0.7rem, 1.4vw, 1rem);
+    padding: 6px 14px;
+    border-radius: 4px;
+    letter-spacing: 0.15em;
+    pointer-events: none;
+    transition: background 0.1s, color 0.1s, box-shadow 0.1s;
+}
+
+#shift-light.shift-light-off {
+    background: rgba(0, 0, 0, 0.6);
+    color: #332200;
+    border: 1px solid #332200;
+    text-shadow: none;
+}
+
+#shift-light.shift-light-on {
+    background: rgba(40, 10, 0, 0.85);
+    color: #ff4400;
+    border: 1px solid #ff4400;
+    text-shadow: 0 0 8px #ff4400, 0 0 16px #cc2200;
+    box-shadow: 0 0 12px rgba(255, 68, 0, 0.4);
+    animation: shift-light-blink 0.3s ease-in-out infinite;
+}
+
+@keyframes shift-light-blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+/* ── Tach Flash Red (stall / redline) ────────────── */
+#hud-tach.tach-flash {
+    color: #ff0000 !important;
+    text-shadow: 0 0 8px rgba(255, 0, 0, 0.8) !important;
+    animation: tach-flash-anim 0.2s ease-in-out 3;
+}
+
+@keyframes tach-flash-anim {
+    0%, 100% { color: #ff0000; }
+    50% { color: #660000; }
+}
+
 /* Blood Overlay */
 #blood-overlay {
     position: fixed;

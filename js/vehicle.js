@@ -56,14 +56,45 @@ export class Vehicle {
         this.manualMode = false;     // false = auto, true = manual
         this.currentGear = 1;       // 1-7 (used in manual mode)
         this.clutchHeld = false;     // clutch pedal state
+
+        // Engine state
+        this.engineRunning = true;
+        this.engineStalled = false;  // true the frame the engine stalls (edge flag)
+        this._wasMoving = false;     // track if vehicle was moving last frame
     }
 
     shiftUp() {
-        if (this.currentGear < GEAR_COUNT) this.currentGear++;
+        if (this.currentGear < GEAR_COUNT) {
+            // Stall if shifting without clutch in manual mode
+            if (this.manualMode && !this.clutchHeld) {
+                this.stallEngine();
+                return;
+            }
+            this.currentGear++;
+        }
     }
 
     shiftDown() {
-        if (this.currentGear > 1) this.currentGear--;
+        if (this.currentGear > 1) {
+            // Stall if shifting without clutch in manual mode
+            if (this.manualMode && !this.clutchHeld) {
+                this.stallEngine();
+                return;
+            }
+            this.currentGear--;
+        }
+    }
+
+    stallEngine() {
+        if (!this.engineRunning) return;
+        this.engineRunning = false;
+        this.engineStalled = true;  // edge flag, consumed by HUD
+        this.speed *= 0.3;          // sudden deceleration
+    }
+
+    startEngine() {
+        this.engineRunning = true;
+        this.engineStalled = false;
     }
 
     toggleTransmission() {
@@ -108,11 +139,22 @@ export class Vehicle {
     }
 
     update(dt, input, roadInfo) {
+        // Clear edge flag from previous frame
+        this.engineStalled = false;
+
         const gear = this.getGear();
         const gearEff = this._getGearEfficiency();
 
-        // Acceleration / braking
-        if (input.gas > 0 && !this.clutchHeld) {
+        // Clutch state (read early so stall checks use current frame)
+        this.clutchHeld = input.clutch;
+
+        // Stall check: fully stopping in manual mode without clutch
+        if (this.engineRunning && this.manualMode && !this.clutchHeld && this._wasMoving && Math.abs(this.speed) < 0.5) {
+            this.stallEngine();
+        }
+
+        // Acceleration / braking — only when engine is running
+        if (input.gas > 0 && !this.clutchHeld && this.engineRunning) {
             const maxSpd = input.boost ? BOOST_MAX_SPEED : MAX_SPEED;
             if (this.speed < maxSpd) {
                 this.speed += ACCELERATION * input.gas * gearEff * dt;
@@ -129,9 +171,6 @@ export class Vehicle {
                 this.speed = Math.max(this.speed, -MAX_SPEED * 0.3);
             }
         }
-
-        // Clutch — engine disconnected, only drag slows you
-        this.clutchHeld = input.clutch;
 
         // ── Drift / E-brake ──────────────────────────────────
         const absSpeed = Math.abs(this.speed);
@@ -252,6 +291,9 @@ export class Vehicle {
             (Math.random() - 0.5) * this.shakeAmount * 0.5,
             (Math.random() - 0.5) * this.shakeAmount * 0.3
         );
+
+        // Track whether vehicle was moving (for stall-on-stop detection)
+        this._wasMoving = Math.abs(this.speed) > 1.0;
     }
 
     applyImpact(intensity) {

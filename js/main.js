@@ -114,6 +114,31 @@ function spawnNPCsForNewChunks() {
     }
 }
 
+// ── Engine Start Button ───────────────────────────────────────
+
+const engineStartBtn = document.getElementById('engine-start-btn');
+
+function tryStartEngine() {
+    if (vehicle.engineRunning) return;
+    vehicle.startEngine();
+    if (engineStartBtn) engineStartBtn.classList.add('hidden');
+}
+
+if (engineStartBtn) {
+    engineStartBtn.addEventListener('click', tryStartEngine);
+    engineStartBtn.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        tryStartEngine();
+    });
+}
+
+// Enter key starts engine
+window.addEventListener('keydown', (e) => {
+    if (e.code === 'Enter' && gameStarted && !vehicle.engineRunning) {
+        tryStartEngine();
+    }
+});
+
 // ── Start Screen ──────────────────────────────────────────────
 
 let gameStarted = false;
@@ -279,6 +304,15 @@ function gameLoop() {
     const chunkHits = gore.update(dt, camera, vehicle.position, vehicle.angle, vehicle.speed);
     for (let i = 0; i < chunkHits; i++) {
         vehicle.applyImpact(0.05);
+    }
+
+    // Show/hide engine start button
+    if (engineStartBtn) {
+        if (!vehicle.engineRunning) {
+            engineStartBtn.classList.remove('hidden');
+        } else {
+            engineStartBtn.classList.add('hidden');
+        }
     }
 
     // Update cockpit (pass input for wiper/washer controls)
