@@ -7,7 +7,6 @@
  */
 
 import * as THREE from 'three';
-import { Lensflare, LensflareElement } from 'three/addons/objects/Lensflare.js';
 import { lerp, clamp, smoothstep } from './utils.js';
 
 // Cycle duration in seconds (one full day)
@@ -259,20 +258,18 @@ export class DayNightCycle {
         this._moonMesh.add(this._moonGlow);
         this._skyGroup.add(this._moonMesh);
 
-        // Lens flares (larger for more prominent bloom)
-        this._sunFlare = this._createLensflare(
-            createFlareTexture(256, 255, 220, 100),
-            createFlareTexture(256, 255, 200, 80),
-            false
+        // Lens flare sprites (additive-blended, works with EffectComposer)
+        this._sunFlares = this._createFlareSprites(
+            [255, 220, 100], [255, 200, 80],
+            [120, 200, 60, 40]
         );
-        this._sunMesh.add(this._sunFlare);
+        for (const s of this._sunFlares) this._sunMesh.add(s);
 
-        this._moonFlare = this._createLensflare(
-            createFlareTexture(256, 200, 200, 230),
-            createFlareTexture(256, 180, 180, 210),
-            true
+        this._moonFlares = this._createFlareSprites(
+            [200, 200, 230], [180, 180, 210],
+            [60, 110, 30, 20]
         );
-        this._moonMesh.add(this._moonFlare);
+        for (const s of this._moonFlares) this._moonMesh.add(s);
 
         // Sky dome gradient (renders behind everything)
         this._skyDome = this._createSkyDome();
@@ -378,21 +375,35 @@ export class DayNightCycle {
         return sprite;
     }
 
-    _createLensflare(coreTexture, haloTexture, small) {
-        const sizes = small
-            ? [250, 500, 120, 80]
-            : [450, 800, 200, 140];
-        const els = [
-            new LensflareElement(coreTexture, sizes[0], 0),
-            new LensflareElement(haloTexture, sizes[1], 0),
-            new LensflareElement(haloTexture, sizes[2], 0.4),
-            new LensflareElement(haloTexture, sizes[3], 0.7),
+    /**
+     * Create additive-blended sprite layers for lens flare effect.
+     * Uses sprites instead of Three.js Lensflare addon for EffectComposer compatibility.
+     */
+    _createFlareSprites(coreRGB, haloRGB, sizes) {
+        const sprites = [];
+        const textures = [
+            createFlareTexture(256, coreRGB[0], coreRGB[1], coreRGB[2]),
+            createFlareTexture(256, haloRGB[0], haloRGB[1], haloRGB[2]),
+            createFlareTexture(256, haloRGB[0], haloRGB[1], haloRGB[2]),
+            createFlareTexture(256, haloRGB[0], haloRGB[1], haloRGB[2]),
         ];
-        const flare = new Lensflare();
-        for (const el of els) flare.addElement(el);
-        flare.userData.baseSizes = sizes;
-        flare.userData.elements = els;
-        return flare;
+        for (let i = 0; i < sizes.length; i++) {
+            const mat = new THREE.SpriteMaterial({
+                map: textures[i],
+                transparent: true,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false,
+                depthTest: false,
+                fog: false,
+                opacity: i === 0 ? 0.9 : 0.4,
+            });
+            const sprite = new THREE.Sprite(mat);
+            sprite.scale.set(sizes[i], sizes[i], 1);
+            sprite.frustumCulled = false;
+            sprite.renderOrder = 1000;
+            sprites.push(sprite);
+        }
+        return sprites;
     }
 
     /**
@@ -670,17 +681,15 @@ export class DayNightCycle {
             this._sunGlow.visible = true;
             this._sunGlow.material.opacity = horizonFade * 0.9;
 
-            // Scale flare with horizon fade
-            this._sunFlare.visible = horizonFade > 0.05;
-            const sunBases = this._sunFlare.userData.baseSizes;
-            const sunEls = this._sunFlare.userData.elements;
-            for (let i = 0; i < sunEls.length; i++) {
-                sunEls[i].size = sunBases[i] * horizonFade;
+            // Scale flare sprites with horizon fade
+            for (const s of this._sunFlares) {
+                s.visible = horizonFade > 0.05;
+                s.material.opacity = (s === this._sunFlares[0] ? 0.9 : 0.4) * horizonFade;
             }
         } else {
             this._sunMesh.visible = false;
             this._sunGlow.visible = false;
-            this._sunFlare.visible = false;
+            for (const s of this._sunFlares) s.visible = false;
         }
 
         // Moon visibility and glow
@@ -694,17 +703,15 @@ export class DayNightCycle {
             this._moonGlow.visible = true;
             this._moonGlow.material.opacity = horizonFade * 0.6;
 
-            // Scale flare with horizon fade
-            this._moonFlare.visible = horizonFade > 0.05;
-            const moonBases = this._moonFlare.userData.baseSizes;
-            const moonEls = this._moonFlare.userData.elements;
-            for (let i = 0; i < moonEls.length; i++) {
-                moonEls[i].size = moonBases[i] * horizonFade;
+            // Scale flare sprites with horizon fade
+            for (const s of this._moonFlares) {
+                s.visible = horizonFade > 0.05;
+                s.material.opacity = (s === this._moonFlares[0] ? 0.9 : 0.4) * horizonFade;
             }
         } else {
             this._moonMesh.visible = false;
             this._moonGlow.visible = false;
-            this._moonFlare.visible = false;
+            for (const s of this._moonFlares) s.visible = false;
         }
     }
 
