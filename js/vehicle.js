@@ -24,8 +24,8 @@ const CG_HEIGHT = 0.52;             // m center of gravity height
 const GRAVITY = 9.81;
 
 // ── Engine / Drivetrain (AWD) ──────────────────────────────────
-const MAX_ENGINE_FORCE = 11000;     // N peak total (split across axles)
-const BOOST_ENGINE_MULT = 1.55;
+const MAX_ENGINE_FORCE = 5500;      // N peak total (split across axles) — halved for gentler acceleration
+const BOOST_ENGINE_MULT = 1.275;    // reduced boost (half the bonus)
 const MAX_SPEED = 100;              // m/s (~360 km/h) soft limit
 const BOOST_MAX_SPEED = 140;
 const REVERSE_FORCE_FRAC = 0.30;   // reverse is 30 % of forward power
@@ -42,12 +42,12 @@ const DRAG_COEFF = 0.42;            // Cd·A·½ρ lumped
 const ROLLING_RESISTANCE = 90;      // N constant
 
 // ── Tire Model (Pacejka-lite) ──────────────────────────────────
-const CS_FRONT = 110000;            // N/rad cornering stiffness (high-perf tires)
-const CS_REAR = 120000;
-const MU_FRONT = 1.95;              // peak grip coefficient (race compound)
-const MU_REAR = 1.90;
+const CS_FRONT = 145000;            // N/rad cornering stiffness (ultra high-perf tires)
+const CS_REAR = 155000;
+const MU_FRONT = 2.60;              // peak grip coefficient (maximum traction)
+const MU_REAR = 2.55;
 const PACEJKA_C = 1.45;             // shape factor (higher = sharper peak)
-const GRIP_MIN_FRAC = 0.15;         // minimum lateral grip even when spinning
+const GRIP_MIN_FRAC = 0.25;         // minimum lateral grip even when spinning
 
 // Handbrake — dramatically kills rear grip for drift initiation
 const HANDBRAKE_REAR_MU = 0.18;
