@@ -18,8 +18,8 @@ import { clamp, lerp } from './utils.js';
 const MASS = 1250;                  // kg — sporty RWD coupe
 const INERTIA = 2400;               // kg·m² yaw moment of inertia
 const WHEELBASE = 2.65;             // m front-to-rear axle
-const FRONT_DIST = 1.18;            // m CG to front axle
-const REAR_DIST = 1.47;             // m CG to rear axle (rear-biased weight)
+const FRONT_DIST = 1.47;            // m CG to front axle
+const REAR_DIST = 1.18;             // m CG to rear axle (rear-biased weight)
 const CG_HEIGHT = 0.52;             // m center of gravity height
 const GRAVITY = 9.81;
 
