@@ -44,6 +44,10 @@ export class InputManager {
         this._touchActive = false;
         this._touchSteer = 0;         // smoothed output value
         this._touchSteerTarget = 0;   // raw target from joystick
+        this._touchGasAnalog = 0;     // analog gas from joystick Y-axis (0-1)
+        this._touchBrakeAnalog = 0;   // analog brake from joystick Y-axis (0-1)
+        this._touchGasTarget = 0;
+        this._touchBrakeTarget = 0;
         this._touchGas = false;
         this._touchBrake = false;
         this._touchHandbrake = false;
@@ -161,14 +165,14 @@ export class InputManager {
                     x: rect.left + rect.width / 2,
                     y: rect.top + rect.height / 2
                 };
-                this._updateJoystick(touch.clientX, joystickBase, joystickThumb);
+                this._updateJoystick(touch.clientX, touch.clientY, joystickBase, joystickThumb);
             });
 
             joystickBase.addEventListener('touchmove', (e) => {
                 e.preventDefault();
                 for (const touch of e.changedTouches) {
                     if (touch.identifier === this._joystickTouchId) {
-                        this._updateJoystick(touch.clientX, joystickBase, joystickThumb);
+                        this._updateJoystick(touch.clientX, touch.clientY, joystickBase, joystickThumb);
                     }
                 }
             });
@@ -178,6 +182,8 @@ export class InputManager {
                     if (touch.identifier === this._joystickTouchId) {
                         this._joystickTouchId = null;
                         this._touchSteerTarget = 0;
+                        this._touchGasTarget = 0;
+                        this._touchBrakeTarget = 0;
                         if (joystickThumb) {
                             joystickThumb.style.transform = 'translate(-50%, -50%)';
                             joystickThumb.style.left = '50%';
@@ -226,31 +232,43 @@ export class InputManager {
         edgeButton(btnTransMode, '_touchTransToggle');
     }
 
-    _updateJoystick(touchX, base, thumb) {
-        const maxDist = 140;          // px — doubled for larger joystick
-        const deadZone = 0.12;        // 12% dead zone near center
-        const dx = touchX - this._joystickCenter.x;
-        const clamped = clamp(dx, -maxDist, maxDist);
-        let raw = clamped / maxDist;  // -1 to 1
-
-        // Apply dead zone — remap so edges of dead zone map to 0
+    /**
+     * Apply deadzone remapping and non-linear response curve to a raw axis value.
+     * @param {number} raw  — input in range -1..1 (or 0..1 for unsigned)
+     * @param {number} deadZone — fraction of range treated as zero (e.g. 0.12)
+     * @param {number} exponent — response curve exponent (>1 = less sensitive near center)
+     * @returns {number} processed value with same sign as input
+     */
+    _applyAnalogCurve(raw, deadZone = 0.12, exponent = 1.6) {
         const sign = Math.sign(raw);
         const abs = Math.abs(raw);
-        if (abs < deadZone) {
-            raw = 0;
-        } else {
-            raw = sign * ((abs - deadZone) / (1 - deadZone));
-        }
+        if (abs < deadZone) return 0;
+        const remapped = (abs - deadZone) / (1 - deadZone);
+        return sign * Math.pow(remapped, exponent);
+    }
 
-        // Non-linear response curve (cubic blend) — less sensitive near center
-        raw = sign * Math.pow(Math.abs(raw), 1.6);
+    _updateJoystick(touchX, touchY, base, thumb) {
+        const maxDist = 140;          // px — max joystick displacement
+        const deadZone = 0.12;        // 12% dead zone near center
 
-        this._touchSteerTarget = raw;
+        // --- X axis (steering) ---
+        const dx = touchX - this._joystickCenter.x;
+        const clampedX = clamp(dx, -maxDist, maxDist);
+        this._touchSteerTarget = this._applyAnalogCurve(clampedX / maxDist, deadZone, 1.6);
+
+        // --- Y axis (gas / brake) ---
+        const dy = touchY - this._joystickCenter.y;
+        const clampedY = clamp(dy, -maxDist, maxDist);
+        const rawY = this._applyAnalogCurve(clampedY / maxDist, deadZone, 1.4);
+        // Up (negative Y) = gas, Down (positive Y) = brake
+        this._touchGasTarget = rawY < 0 ? -rawY : 0;
+        this._touchBrakeTarget = rawY > 0 ? rawY : 0;
 
         if (thumb) {
-            const pct = 50 + (clamped / maxDist) * 40;
-            thumb.style.left = pct + '%';
-            thumb.style.top = '50%';
+            const pctX = 50 + (clampedX / maxDist) * 40;
+            const pctY = 50 + (clampedY / maxDist) * 40;
+            thumb.style.left = pctX + '%';
+            thumb.style.top = pctY + '%';
             thumb.style.transform = 'translate(-50%, -50%)';
         }
     }
@@ -301,19 +319,25 @@ export class InputManager {
         }
         this._mouseMovementX = 0;
 
-        // --- Gamepad ---
+        // --- Gamepad (analog with deadzone remapping + response curve) ---
         if (this._gamepadIndex !== null) {
             const gamepads = navigator.getGamepads();
             const gp = gamepads[this._gamepadIndex];
             if (gp) {
+                // Left stick X — steering with deadzone + response curve
                 const lx = gp.axes[0] || 0;
-                if (Math.abs(lx) > 0.1) steer += lx;
+                const steerVal = this._applyAnalogCurve(lx, 0.10, 1.6);
+                if (steerVal !== 0) steer += steerVal;
 
+                // Right trigger — gas (analog)
                 const rt = gp.buttons[7] ? gp.buttons[7].value : 0;
-                if (rt > 0.05) gas = Math.max(gas, rt);
+                const gasVal = this._applyAnalogCurve(rt, 0.05, 1.3);
+                if (gasVal > 0) gas = Math.max(gas, gasVal);
 
+                // Left trigger — brake (analog)
                 const lt = gp.buttons[6] ? gp.buttons[6].value : 0;
-                if (lt > 0.05) brake = Math.max(brake, lt);
+                const brakeVal = this._applyAnalogCurve(lt, 0.05, 1.3);
+                if (brakeVal > 0) brake = Math.max(brake, brakeVal);
 
                 if (gp.buttons[0] && gp.buttons[0].pressed) handbrake = true;
                 if ((gp.buttons[1] && gp.buttons[1].pressed) ||
@@ -323,17 +347,29 @@ export class InputManager {
 
         // --- Touch ---
         if (this.isTouchDevice) {
-            // Smooth touch steering — lerp toward target for fluid feel
+            // Smooth touch inputs — lerp toward targets for fluid feel
             const smoothRate = 8;  // higher = faster response (but still smooth)
             const t = 1 - Math.exp(-smoothRate * dt);
+
+            // Steering (X-axis)
             this._touchSteer = lerp(this._touchSteer, this._touchSteerTarget, t);
-            // Snap to zero when very close and target is zero (clean release)
             if (this._touchSteerTarget === 0 && Math.abs(this._touchSteer) < 0.005) {
                 this._touchSteer = 0;
             }
             if (this._touchSteer !== 0) steer += this._touchSteer;
+
+            // Analog gas/brake from joystick Y-axis (smoothed)
+            this._touchGasAnalog = lerp(this._touchGasAnalog, this._touchGasTarget, t);
+            this._touchBrakeAnalog = lerp(this._touchBrakeAnalog, this._touchBrakeTarget, t);
+            if (this._touchGasTarget === 0 && this._touchGasAnalog < 0.005) this._touchGasAnalog = 0;
+            if (this._touchBrakeTarget === 0 && this._touchBrakeAnalog < 0.005) this._touchBrakeAnalog = 0;
+
+            // Joystick Y-axis analog values, or fall back to button (full press)
+            gas = Math.max(gas, this._touchGasAnalog);
+            brake = Math.max(brake, this._touchBrakeAnalog);
             if (this._touchGas) gas = Math.max(gas, 1);
             if (this._touchBrake) brake = Math.max(brake, 1);
+
             if (this._touchHandbrake) handbrake = true;
             if (this._touchClutch) clutch = true;
             if (this._touchShiftUp) { this.shiftUp = true; this._touchShiftUp = false; }
