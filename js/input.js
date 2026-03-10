@@ -5,7 +5,7 @@
  * clutch, shiftUp, shiftDown, toggleTransmission.
  */
 
-import { clamp } from './utils.js';
+import { clamp, lerp } from './utils.js';
 
 export class InputManager {
     constructor() {
@@ -42,7 +42,8 @@ export class InputManager {
 
         // Touch state
         this._touchActive = false;
-        this._touchSteer = 0;
+        this._touchSteer = 0;         // smoothed output value
+        this._touchSteerTarget = 0;   // raw target from joystick
         this._touchGas = false;
         this._touchBrake = false;
         this._touchHandbrake = false;
@@ -176,7 +177,7 @@ export class InputManager {
                 for (const touch of e.changedTouches) {
                     if (touch.identifier === this._joystickTouchId) {
                         this._joystickTouchId = null;
-                        this._touchSteer = 0;
+                        this._touchSteerTarget = 0;
                         if (joystickThumb) {
                             joystickThumb.style.transform = 'translate(-50%, -50%)';
                             joystickThumb.style.left = '50%';
@@ -226,10 +227,25 @@ export class InputManager {
     }
 
     _updateJoystick(touchX, base, thumb) {
-        const maxDist = 50;
+        const maxDist = 70;           // px — wider range for more control
+        const deadZone = 0.12;        // 12% dead zone near center
         const dx = touchX - this._joystickCenter.x;
         const clamped = clamp(dx, -maxDist, maxDist);
-        this._touchSteer = clamped / maxDist;
+        let raw = clamped / maxDist;  // -1 to 1
+
+        // Apply dead zone — remap so edges of dead zone map to 0
+        const sign = Math.sign(raw);
+        const abs = Math.abs(raw);
+        if (abs < deadZone) {
+            raw = 0;
+        } else {
+            raw = sign * ((abs - deadZone) / (1 - deadZone));
+        }
+
+        // Non-linear response curve (cubic blend) — less sensitive near center
+        raw = sign * Math.pow(Math.abs(raw), 1.6);
+
+        this._touchSteerTarget = raw;
 
         if (thumb) {
             const pct = 50 + (clamped / maxDist) * 35;
@@ -307,6 +323,14 @@ export class InputManager {
 
         // --- Touch ---
         if (this.isTouchDevice) {
+            // Smooth touch steering — lerp toward target for fluid feel
+            const smoothRate = 8;  // higher = faster response (but still smooth)
+            const t = 1 - Math.exp(-smoothRate * dt);
+            this._touchSteer = lerp(this._touchSteer, this._touchSteerTarget, t);
+            // Snap to zero when very close and target is zero (clean release)
+            if (this._touchSteerTarget === 0 && Math.abs(this._touchSteer) < 0.005) {
+                this._touchSteer = 0;
+            }
             if (this._touchSteer !== 0) steer += this._touchSteer;
             if (this._touchGas) gas = Math.max(gas, 1);
             if (this._touchBrake) brake = Math.max(brake, 1);
