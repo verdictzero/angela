@@ -45,6 +45,21 @@ export class RoadManager {
         this._nextChunkId = 0;
         this._lastRemovedChunks = [];
 
+        // Hairpin turn state
+        this._hairpinCooldown = 200;  // points until next hairpin (~800m)
+        this._hairpinRemaining = 0;   // points remaining in current hairpin
+        this._hairpinDirection = 1;   // +1 or -1
+        this._hairpinPhase = 'none';  // 'none', 'leadin', 'turn', 'leadout'
+        this._hairpinPhaseRemaining = 0;
+
+        // Intersection state
+        this.intersections = [];
+        this._intersectionCooldown = 250;  // ~1000m
+
+        // Gas station state
+        this.gasStations = [];
+        this._gasStationCooldown = 400;   // ~1600m
+
         // Generate textures
         this._textures = this._generateTextures();
 
@@ -179,13 +194,105 @@ export class RoadManager {
 
     _generatePoints(count) {
         for (let i = 0; i < count; i++) {
+            const ptIndex = this.points.length;
             let pos;
-            if (this.points.length === 0) {
+            if (ptIndex === 0) {
                 pos = new THREE.Vector3(0, 0, 0);
             } else {
-                const last = this.points[this.points.length - 1].position;
-                this.targetCurvature += (Math.random() - 0.5) * 0.06;
-                this.targetCurvature = clamp(this.targetCurvature, -0.04, 0.04);
+                const last = this.points[ptIndex - 1].position;
+
+                // ── Hairpin Turn Logic ──
+                let curvatureClampMax = 0.04;
+                if (this._hairpinPhase === 'none') {
+                    this._hairpinCooldown--;
+                    if (this._hairpinCooldown <= 0) {
+                        // Start a hairpin: lead-in phase first
+                        this._hairpinDirection = Math.random() < 0.5 ? 1 : -1;
+                        this._hairpinPhase = 'leadin';
+                        this._hairpinPhaseRemaining = 10;
+                    }
+                }
+
+                if (this._hairpinPhase === 'leadin') {
+                    // Straighten out before the turn
+                    this.targetCurvature *= 0.8;
+                    curvatureClampMax = 0.02;
+                    this._hairpinPhaseRemaining--;
+                    if (this._hairpinPhaseRemaining <= 0) {
+                        this._hairpinPhase = 'turn';
+                        this._hairpinPhaseRemaining = 25 + Math.floor(Math.random() * 10);
+                    }
+                } else if (this._hairpinPhase === 'turn') {
+                    // Force high curvature in one direction
+                    this.targetCurvature = this._hairpinDirection * (0.12 + Math.random() * 0.03);
+                    curvatureClampMax = 0.15;
+                    this._hairpinPhaseRemaining--;
+                    if (this._hairpinPhaseRemaining <= 0) {
+                        this._hairpinPhase = 'leadout';
+                        this._hairpinPhaseRemaining = 10;
+                    }
+                } else if (this._hairpinPhase === 'leadout') {
+                    // Gradually return to normal
+                    this.targetCurvature *= 0.7;
+                    curvatureClampMax = 0.08;
+                    this._hairpinPhaseRemaining--;
+                    if (this._hairpinPhaseRemaining <= 0) {
+                        this._hairpinPhase = 'none';
+                        this._hairpinCooldown = 150 + Math.floor(Math.random() * 150);
+                    }
+                } else {
+                    // Normal curvature
+                    this.targetCurvature += (Math.random() - 0.5) * 0.06;
+                }
+
+                // ── Intersection / Gas Station: force straight ──
+                let forceStraight = false;
+
+                this._intersectionCooldown--;
+                if (this._intersectionCooldown <= 0 && this._hairpinPhase === 'none') {
+                    const forward = new THREE.Vector3(
+                        Math.sin(this.currentAngle), 0, -Math.cos(this.currentAngle)
+                    ).normalize();
+                    const right = new THREE.Vector3(
+                        Math.cos(this.currentAngle), 0, Math.sin(this.currentAngle)
+                    ).normalize();
+                    this.intersections.push({
+                        pointIndex: ptIndex,
+                        position: last.clone(),
+                        forward: forward.clone(),
+                        right: right.clone(),
+                    });
+                    this._intersectionCooldown = 200 + Math.floor(Math.random() * 100);
+                    forceStraight = true;
+                }
+
+                this._gasStationCooldown--;
+                if (this._gasStationCooldown <= 0 && this._hairpinPhase === 'none') {
+                    const forward = new THREE.Vector3(
+                        Math.sin(this.currentAngle), 0, -Math.cos(this.currentAngle)
+                    ).normalize();
+                    const right = new THREE.Vector3(
+                        Math.cos(this.currentAngle), 0, Math.sin(this.currentAngle)
+                    ).normalize();
+                    const side = Math.random() < 0.5 ? 1 : -1;
+                    this.gasStations.push({
+                        pointIndex: ptIndex,
+                        position: last.clone(),
+                        forward: forward.clone(),
+                        right: right.clone(),
+                        side,  // +1 = right side, -1 = left side
+                    });
+                    this._gasStationCooldown = 350 + Math.floor(Math.random() * 100);
+                    forceStraight = true;
+                }
+
+                if (forceStraight) {
+                    this.targetCurvature = 0;
+                    this.currentCurvature *= 0.3;
+                }
+
+                // Clamp curvature
+                this.targetCurvature = clamp(this.targetCurvature, -curvatureClampMax, curvatureClampMax);
                 this.currentCurvature += (this.targetCurvature - this.currentCurvature) * 0.08;
                 this.currentAngle += this.currentCurvature;
                 pos = new THREE.Vector3(
@@ -258,6 +365,20 @@ export class RoadManager {
         // White edge lines (where road meets shoulder)
         this._addSolidLine(group, startIdx, endIdx, -ROAD_HALF_WIDTH + 0.25, 0.02, 0.10, this._markingMat);
         this._addSolidLine(group, startIdx, endIdx, ROAD_HALF_WIDTH - 0.25, 0.02, 0.10, this._markingMat);
+
+        // ── Intersections ──────────────────────────────────────
+        for (const ix of this.intersections) {
+            if (ix.pointIndex >= startIdx && ix.pointIndex < endIdx) {
+                this._buildIntersection(group, ix);
+            }
+        }
+
+        // ── Gas Stations ──────────────────────────────────────
+        for (const gs of this.gasStations) {
+            if (gs.pointIndex >= startIdx && gs.pointIndex < endIdx) {
+                this._buildGasStation(group, gs);
+            }
+        }
 
         const chunk = { id: this._nextChunkId++, group, startIdx, endIdx, startDist: startIdx * POINT_SPACING };
         this.scene.add(group);
@@ -373,6 +494,215 @@ export class RoadManager {
         group.add(new THREE.Mesh(geo, material));
     }
 
+    // ── Intersection Geometry ─────────────────────────────────
+
+    _buildIntersection(group, ix) {
+        const pos = ix.position;
+        const right = ix.right;  // perpendicular to main road = direction of cross-road
+        const fwd = ix.forward;  // main road forward = cross-road's lateral
+
+        const CROSS_LENGTH = 40;   // how far the cross-road extends each side
+        const CROSS_HALF_WIDTH = 6; // half-width of cross-road
+        const CROSS_SHOULDER = 2;   // shoulder width on cross-road
+        const SEGMENTS = 20;
+
+        // Build cross-road surface as a flat strip along the right vector
+        const verts = [];
+        const uvs = [];
+        const indices = [];
+
+        for (let i = 0; i <= SEGMENTS; i++) {
+            const t = (i / SEGMENTS) * 2 - 1; // -1 to 1
+            const dist = t * CROSS_LENGTH;
+            const cx = pos.x + right.x * dist;
+            const cz = pos.z + right.z * dist;
+
+            // Left and right edges (using main road forward as lateral direction for cross-road)
+            verts.push(
+                cx - fwd.x * CROSS_HALF_WIDTH, 0.005, cz - fwd.z * CROSS_HALF_WIDTH,
+                cx + fwd.x * CROSS_HALF_WIDTH, 0.005, cz + fwd.z * CROSS_HALF_WIDTH
+            );
+
+            const v = (i / SEGMENTS) * CROSS_LENGTH * 2 / 7;
+            uvs.push(0, v, 1, v);
+
+            if (i < SEGMENTS) {
+                const bl = i * 2, br = i * 2 + 1;
+                const tl = (i + 1) * 2, tr = (i + 1) * 2 + 1;
+                indices.push(bl, br, tl, br, tr, tl);
+            }
+        }
+
+        const crossGeo = new THREE.BufferGeometry();
+        crossGeo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+        crossGeo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+        crossGeo.setIndex(indices);
+        crossGeo.computeVertexNormals();
+        group.add(new THREE.Mesh(crossGeo, this._roadMat));
+
+        // Cross-road shoulders
+        for (const sideSign of [-1, 1]) {
+            const sVerts = [];
+            const sUvs = [];
+            const sIndices = [];
+            for (let i = 0; i <= SEGMENTS; i++) {
+                const t = (i / SEGMENTS) * 2 - 1;
+                const dist = t * CROSS_LENGTH;
+                const cx = pos.x + right.x * dist;
+                const cz = pos.z + right.z * dist;
+
+                const innerEdge = CROSS_HALF_WIDTH * sideSign;
+                const outerEdge = (CROSS_HALF_WIDTH + CROSS_SHOULDER) * sideSign;
+
+                sVerts.push(
+                    cx + fwd.x * innerEdge, 0.003, cz + fwd.z * innerEdge,
+                    cx + fwd.x * outerEdge, 0.003, cz + fwd.z * outerEdge
+                );
+                const v = (i / SEGMENTS) * CROSS_LENGTH * 2 / 3;
+                sUvs.push(0, v, 1, v);
+                if (i < SEGMENTS) {
+                    const bl = i * 2, br = i * 2 + 1;
+                    const tl = (i + 1) * 2, tr = (i + 1) * 2 + 1;
+                    sIndices.push(bl, br, tl, br, tr, tl);
+                }
+            }
+            const sGeo = new THREE.BufferGeometry();
+            sGeo.setAttribute('position', new THREE.Float32BufferAttribute(sVerts, 3));
+            sGeo.setAttribute('uv', new THREE.Float32BufferAttribute(sUvs, 2));
+            sGeo.setIndex(sIndices);
+            sGeo.computeVertexNormals();
+            group.add(new THREE.Mesh(sGeo, this._shoulderMat));
+        }
+
+        // Stop lines on cross-road approaches (white lines where cross-road meets main road)
+        for (const sideSign of [-1, 1]) {
+            const lineDist = ROAD_HALF_WIDTH + SHOULDER_WIDTH + 1; // just outside main road shoulder
+            const lx = pos.x + right.x * lineDist * sideSign;
+            const lz = pos.z + right.z * lineDist * sideSign;
+            const lineGeo = new THREE.PlaneGeometry(CROSS_HALF_WIDTH * 2, 0.4);
+            lineGeo.rotateX(-Math.PI / 2);
+            const lineMesh = new THREE.Mesh(lineGeo, this._markingMat);
+            lineMesh.position.set(lx, 0.02, lz);
+            lineMesh.rotation.y = Math.atan2(fwd.x, fwd.z);
+            group.add(lineMesh);
+        }
+
+        // Center dashed line on cross-road
+        for (let i = 0; i <= SEGMENTS; i++) {
+            const t = (i / SEGMENTS) * 2 - 1;
+            const dist = t * CROSS_LENGTH;
+            // Skip the section that overlaps main road
+            if (Math.abs(dist) < ROAD_HALF_WIDTH + SHOULDER_WIDTH + 2) continue;
+            // Only draw dashes
+            const dashPos = Math.abs(dist) % (DASH_LENGTH + DASH_GAP);
+            if (dashPos > DASH_LENGTH) continue;
+
+            const cx = pos.x + right.x * dist;
+            const cz = pos.z + right.z * dist;
+            const dashGeo = new THREE.PlaneGeometry(0.15, POINT_SPACING * 0.8);
+            dashGeo.rotateX(-Math.PI / 2);
+            const dashMesh = new THREE.Mesh(dashGeo, this._yellowMat);
+            dashMesh.position.set(cx, 0.02, cz);
+            dashMesh.rotation.y = Math.atan2(right.x, right.z);
+            group.add(dashMesh);
+        }
+    }
+
+    // ── Gas Station Geometry ──────────────────────────────────
+
+    _buildGasStation(group, gs) {
+        const pos = gs.position;
+        const fwd = gs.forward;
+        const right = gs.right;
+        const side = gs.side; // +1 right, -1 left
+
+        // Pulloff area dimensions
+        const PULLOFF_LENGTH = 24;
+        const PULLOFF_WIDTH = 14;
+        const PULLOFF_LATERAL_START = SW_OUTER + 1; // just beyond sidewalk
+
+        // Center of the pulloff area
+        const pulloffCenterLat = PULLOFF_LATERAL_START + PULLOFF_WIDTH / 2;
+        const cx = pos.x + right.x * pulloffCenterLat * side;
+        const cz = pos.z + right.z * pulloffCenterLat * side;
+
+        // Pulloff surface (flat asphalt)
+        const pulloffGeo = new THREE.PlaneGeometry(PULLOFF_LENGTH, PULLOFF_WIDTH);
+        pulloffGeo.rotateX(-Math.PI / 2);
+        const pulloffMesh = new THREE.Mesh(pulloffGeo, this._roadMat);
+        pulloffMesh.position.set(cx, 0.004, cz);
+        pulloffMesh.rotation.y = Math.atan2(fwd.x, fwd.z);
+        group.add(pulloffMesh);
+
+        // Canopy — thin wide roof
+        const CANOPY_WIDTH = 10;
+        const CANOPY_DEPTH = 6;
+        const CANOPY_HEIGHT = 4.2;
+        const CANOPY_THICKNESS = 0.25;
+        const canopyMat = new THREE.MeshLambertMaterial({ color: 0x334455 });
+
+        // Canopy center (slightly further from road than pulloff center)
+        const canopyCenterLat = PULLOFF_LATERAL_START + 5;
+        const canopyX = pos.x + right.x * canopyCenterLat * side;
+        const canopyZ = pos.z + right.z * canopyCenterLat * side;
+
+        // Roof
+        const roofGeo = new THREE.BoxGeometry(CANOPY_WIDTH, CANOPY_THICKNESS, CANOPY_DEPTH);
+        const roofMesh = new THREE.Mesh(roofGeo, canopyMat);
+        roofMesh.position.set(canopyX, CANOPY_HEIGHT, canopyZ);
+        roofMesh.rotation.y = Math.atan2(fwd.x, fwd.z);
+        group.add(roofMesh);
+
+        // 4 pillars
+        const pillarMat = new THREE.MeshLambertMaterial({ color: 0x888888 });
+        const pillarGeo = new THREE.BoxGeometry(0.3, CANOPY_HEIGHT, 0.3);
+        const pillarOffsets = [
+            [-CANOPY_WIDTH / 2 + 0.5, -CANOPY_DEPTH / 2 + 0.5],
+            [CANOPY_WIDTH / 2 - 0.5, -CANOPY_DEPTH / 2 + 0.5],
+            [-CANOPY_WIDTH / 2 + 0.5, CANOPY_DEPTH / 2 - 0.5],
+            [CANOPY_WIDTH / 2 - 0.5, CANOPY_DEPTH / 2 - 0.5],
+        ];
+        for (const [along, across] of pillarOffsets) {
+            const px = canopyX + fwd.x * along + right.x * across * side;
+            const pz = canopyZ + fwd.z * along + right.z * across * side;
+            const pillar = new THREE.Mesh(pillarGeo, pillarMat);
+            pillar.position.set(px, CANOPY_HEIGHT / 2, pz);
+            group.add(pillar);
+        }
+
+        // Pump islands — 2 pumps under canopy
+        const pumpMat = new THREE.MeshLambertMaterial({ color: 0xcc4444 });
+        const pumpGeo = new THREE.BoxGeometry(0.5, 1.4, 0.4);
+        for (let pi = 0; pi < 2; pi++) {
+            const along = (pi - 0.5) * 4;
+            const px = canopyX + fwd.x * along;
+            const pz = canopyZ + fwd.z * along;
+            const pump = new THREE.Mesh(pumpGeo, pumpMat);
+            pump.position.set(px, 0.7, pz);
+            pump.rotation.y = Math.atan2(fwd.x, fwd.z);
+            group.add(pump);
+        }
+
+        // Building behind canopy
+        const buildingMat = new THREE.MeshLambertMaterial({ color: 0x665544 });
+        const BLDG_WIDTH = 8;
+        const BLDG_DEPTH = 5;
+        const BLDG_HEIGHT = 3.5;
+        const bldgLat = PULLOFF_LATERAL_START + PULLOFF_WIDTH - BLDG_DEPTH / 2;
+        const bldgX = pos.x + right.x * bldgLat * side;
+        const bldgZ = pos.z + right.z * bldgLat * side;
+        const buildingGeo = new THREE.BoxGeometry(BLDG_WIDTH, BLDG_HEIGHT, BLDG_DEPTH);
+        const building = new THREE.Mesh(buildingGeo, buildingMat);
+        building.position.set(bldgX, BLDG_HEIGHT / 2, bldgZ);
+        building.rotation.y = Math.atan2(fwd.x, fwd.z);
+        group.add(building);
+
+        // Store bounds for refuel detection
+        gs.pulloffCenter = new THREE.Vector3(cx, 0, cz);
+        gs.pulloffHalfLength = PULLOFF_LENGTH / 2;
+        gs.pulloffHalfWidth = PULLOFF_WIDTH / 2;
+    }
+
     // ── Chunk Management ───────────────────────────────────────
 
     _buildAllNeededChunks(playerPos) {
@@ -423,13 +753,73 @@ export class RoadManager {
         const dz = pos.z - pt.position.z;
         const lateral = dx * pt.right.x + dz * pt.right.z;
         const absLat = Math.abs(lateral);
+
+        let onRoad = absLat < ROAD_HALF_WIDTH;
+        let onShoulder = absLat >= ROAD_HALF_WIDTH && absLat < SHOULDER_OUTER;
+        const onSidewalk = absLat >= SW_INNER && absLat < SW_OUTER;
+        let offRoad = absLat >= SW_OUTER;
+
+        // Check if on an intersection cross-road
+        if (!onRoad) {
+            for (const ix of this.intersections) {
+                const ix_dx = pos.x - ix.position.x;
+                const ix_dz = pos.z - ix.position.z;
+                // Distance along cross-road (right vector of main road)
+                const alongCross = ix_dx * ix.right.x + ix_dz * ix.right.z;
+                // Distance lateral to cross-road (forward vector of main road)
+                const lateralCross = Math.abs(ix_dx * ix.forward.x + ix_dz * ix.forward.z);
+                if (Math.abs(alongCross) < 40 && lateralCross < 6) {
+                    onRoad = true;
+                    onShoulder = false;
+                    offRoad = false;
+                    break;
+                }
+                if (Math.abs(alongCross) < 40 && lateralCross < 8) {
+                    onShoulder = true;
+                    offRoad = false;
+                    break;
+                }
+            }
+        }
+
+        // Check if on a gas station pulloff
+        if (offRoad) {
+            for (const gs of this.gasStations) {
+                if (!gs.pulloffCenter) continue;
+                const gs_dx = pos.x - gs.pulloffCenter.x;
+                const gs_dz = pos.z - gs.pulloffCenter.z;
+                const alongRoad = Math.abs(gs_dx * gs.forward.x + gs_dz * gs.forward.z);
+                const acrossRoad = Math.abs(gs_dx * gs.right.x + gs_dz * gs.right.z);
+                if (alongRoad < gs.pulloffHalfLength && acrossRoad < gs.pulloffHalfWidth) {
+                    onRoad = true;
+                    offRoad = false;
+                    break;
+                }
+            }
+        }
+
         return {
             index: idx, point: pt, lateralOffset: lateral,
-            onRoad: absLat < ROAD_HALF_WIDTH,
-            onShoulder: absLat >= ROAD_HALF_WIDTH && absLat < SHOULDER_OUTER,
-            onSidewalk: absLat >= SW_INNER && absLat < SW_OUTER,
-            offRoad: absLat >= SW_OUTER,
+            onRoad, onShoulder, onSidewalk, offRoad,
         };
+    }
+
+    getGasStationAt(pos) {
+        for (const gs of this.gasStations) {
+            if (!gs.pulloffCenter) continue;
+            const dx = pos.x - gs.pulloffCenter.x;
+            const dz = pos.z - gs.pulloffCenter.z;
+            const alongRoad = Math.abs(dx * gs.forward.x + dz * gs.forward.z);
+            const acrossRoad = Math.abs(dx * gs.right.x + dz * gs.right.z);
+            if (alongRoad < gs.pulloffHalfLength && acrossRoad < gs.pulloffHalfWidth) {
+                return gs;
+            }
+        }
+        return null;
+    }
+
+    getIntersections() {
+        return this.intersections;
     }
 
     /**

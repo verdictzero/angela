@@ -52,6 +52,7 @@ export class HUD {
         this._shiftLightEl = document.getElementById('shift-light');
 
         this._fuel = 100; // percent
+        this._refuelTimer = 0;
 
         this.score = 0;
         this.combo = 0;
@@ -64,6 +65,14 @@ export class HUD {
 
         // Tach flash timer
         this._tachFlashTimer = 0;
+    }
+
+    refuel(dt) {
+        this._fuel = Math.min(100, this._fuel + dt * 15);
+        if (this._fuelEl) {
+            this._fuelEl.classList.add('refueling');
+        }
+        this._refuelTimer = 0.3;
     }
 
     addKill(points = 100) {
@@ -151,6 +160,13 @@ export class HUD {
         // Fuel
         if (this._fuelEl) {
             this._fuelEl.textContent = `FUEL: ${String(Math.round(this._fuel)).padStart(3, '0')}`;
+            if (this._refuelTimer > 0) {
+                this._refuelTimer -= dt;
+                this._fuelEl.style.color = '#00ff66';
+            } else {
+                this._fuelEl.style.color = '';
+                this._fuelEl.classList.remove('refueling');
+            }
         }
 
         // Score multiplier (combo)
