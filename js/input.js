@@ -227,7 +227,7 @@ export class InputManager {
     }
 
     _updateJoystick(touchX, base, thumb) {
-        const maxDist = 70;           // px — wider range for more control
+        const maxDist = 140;          // px — doubled for larger joystick
         const deadZone = 0.12;        // 12% dead zone near center
         const dx = touchX - this._joystickCenter.x;
         const clamped = clamp(dx, -maxDist, maxDist);
@@ -248,7 +248,7 @@ export class InputManager {
         this._touchSteerTarget = raw;
 
         if (thumb) {
-            const pct = 50 + (clamped / maxDist) * 35;
+            const pct = 50 + (clamped / maxDist) * 40;
             thumb.style.left = pct + '%';
             thumb.style.top = '50%';
             thumb.style.transform = 'translate(-50%, -50%)';
