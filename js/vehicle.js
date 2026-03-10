@@ -24,10 +24,10 @@ const CG_HEIGHT = 0.52;             // m center of gravity height
 const GRAVITY = 9.81;
 
 // ── Engine / Drivetrain (AWD) ──────────────────────────────────
-const MAX_ENGINE_FORCE = 5500;      // N peak total (split across axles) — halved for gentler acceleration
+const MAX_ENGINE_FORCE = 3200;      // N peak total (split across axles) — scaled to match visual scene
 const BOOST_ENGINE_MULT = 1.275;    // reduced boost (half the bonus)
-const MAX_SPEED = 100;              // m/s (~360 km/h) soft limit
-const BOOST_MAX_SPEED = 140;
+const MAX_SPEED = 50;               // m/s (~180 km/h) soft limit — matches visual object speed
+const BOOST_MAX_SPEED = 70;
 const REVERSE_FORCE_FRAC = 0.30;   // reverse is 30 % of forward power
 const AWD_FRONT_SPLIT = 0.40;      // 40% front / 60% rear torque split
 const AWD_REAR_SPLIT = 0.60;
@@ -53,12 +53,12 @@ const GRIP_MIN_FRAC = 0.25;         // minimum lateral grip even when spinning
 const HANDBRAKE_REAR_MU = 0.18;
 
 // ── Steering ───────────────────────────────────────────────────
-const MAX_STEER_ANGLE = 0.55;       // rad (~31 °)
-const STEER_SPEED_LOW = 2.8;        // rad/s input rate at low speed
-const STEER_SPEED_HIGH = 1.2;       // rad/s at high speed
+const MAX_STEER_ANGLE = 0.40;       // rad (~23 °) — tighter max angle
+const STEER_SPEED_LOW = 2.0;        // rad/s input rate at low speed
+const STEER_SPEED_HIGH = 0.8;       // rad/s at high speed
 const STEER_RETURN = 5.0;           // self-centering rate
 const MIN_STEER_SPEED = 1.0;        // m/s minimum to steer
-const DRIFT_STEER_BOOST = 1.5;      // counter-steer responsiveness multiplier
+const DRIFT_STEER_BOOST = 1.3;      // counter-steer responsiveness multiplier
 
 // ── Stability helpers ──────────────────────────────────────────
 const YAW_DAMPING = 700;            // N·m·s/rad prevents oscillation
@@ -66,7 +66,7 @@ const LOW_SPEED_BLEND = 3.5;        // m/s — below this, blend kinematic model
 const LOW_SPEED_LAT_DAMP = 6.0;     // artificial lateral kill at crawl speed
 
 // ── Transmission ───────────────────────────────────────────────
-const GEAR_SHIFTS = [0, 8, 18, 30, 45, 62, 80];
+const GEAR_SHIFTS = [0, 4, 9, 15, 23, 32, 42];
 const GEAR_COUNT = 7;
 
 // ── Drift detection ────────────────────────────────────────────

@@ -277,7 +277,7 @@ export class InputManager {
 
         // --- Mouse steering ---
         if (this._mouseSteering) {
-            const sensitivity = 0.003;
+            const sensitivity = 0.002;
             this._mouseSteerValue += this._mouseMovementX * sensitivity;
             this._mouseSteerValue = clamp(this._mouseSteerValue, -1, 1);
             this._mouseSteerValue *= 0.95;

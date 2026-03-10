@@ -7,7 +7,7 @@
 
 // Fake 7-speed auto transmission: gear speed thresholds in m/s
 // Spread across achievable speed range (~96 m/s terminal velocity)
-const GEAR_SHIFTS = [0, 8, 18, 30, 45, 62, 80];
+const GEAR_SHIFTS = [0, 4, 9, 15, 23, 32, 42];
 const RPM_IDLE = 800;
 const RPM_REDLINE = 7200;
 
