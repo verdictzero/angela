@@ -159,45 +159,6 @@ export class KillableNPCManager {
                 lateralOffset: spawn.lateralOffset || 0,
                 distAccum: 0,
                 isStatic,
-                isCrossTraffic: false,
-            };
-
-            this.npcs.push(npc);
-        }
-    }
-
-    /**
-     * Spawn cross-traffic NPCs at an intersection.
-     * They travel perpendicular to the main road.
-     */
-    spawnCrossTraffic(intersection) {
-        const CROSS_NPC_COUNT = 3 + Math.floor(Math.random() * 2); // 3-4
-        for (let i = 0; i < CROSS_NPC_COUNT; i++) {
-            if (this.npcs.length >= MAX_NPCS) break;
-
-            const direction = Math.random() < 0.5 ? 1 : -1;
-            const startDist = -35 + Math.random() * 10; // start at far end of cross-road
-            const lateralOffset = (Math.random() - 0.5) * 8; // random lane on cross-road
-
-            const startX = intersection.position.x + intersection.right.x * startDist * direction
-                + intersection.forward.x * lateralOffset;
-            const startZ = intersection.position.z + intersection.right.z * startDist * direction
-                + intersection.forward.z * lateralOffset;
-
-            const npc = {
-                position: new THREE.Vector3(startX, 0, startZ),
-                alive: true,
-                speed: randomRange(MOPED_SPEED_MIN, MOPED_SPEED_MAX),
-                roadIndex: intersection.pointIndex,
-                lateralOffset: 0,
-                distAccum: 0,
-                isStatic: false,
-                isCrossTraffic: true,
-                crossDirection: direction,
-                crossRight: intersection.right.clone(),
-                crossForward: intersection.forward.clone(),
-                crossOrigin: intersection.position.clone(),
-                crossLateralOffset: lateralOffset,
             };
 
             this.npcs.push(npc);
@@ -216,26 +177,7 @@ export class KillableNPCManager {
             const m = this.npcs[i];
             if (!m.alive) continue;
 
-            // Static NPCs don't move — skip road following
-            if (m.isCrossTraffic) {
-                // Cross-traffic: move along the perpendicular road
-                const dist = m.speed * dt;
-                m.distAccum += dist;
-                const travel = m.distAccum * m.crossDirection;
-                m.position.x = m.crossOrigin.x
-                    + m.crossRight.x * travel
-                    + m.crossForward.x * m.crossLateralOffset;
-                m.position.z = m.crossOrigin.z
-                    + m.crossRight.z * travel
-                    + m.crossForward.z * m.crossLateralOffset;
-                m.position.y = 0;
-
-                // Despawn if past end of cross-road
-                if (Math.abs(travel) > 45) {
-                    this._removeNPC(i);
-                    continue;
-                }
-            } else if (!m.isStatic) {
+            if (!m.isStatic) {
                 // Advance along road spine
                 const dist = m.speed * dt;
                 m.distAccum += dist;
@@ -299,15 +241,8 @@ export class KillableNPCManager {
             }
 
             // Get forward direction at NPC's position
-            let mopedAngle;
-            if (npc.isCrossTraffic) {
-                // Cross-traffic: facing along perpendicular road
-                const dir = npc.crossDirection;
-                mopedAngle = Math.atan2(npc.crossRight.x * dir, npc.crossRight.z * dir);
-            } else {
-                const pt = roadPoints[Math.min(npc.roadIndex, maxIdx)];
-                mopedAngle = Math.atan2(pt.forward.x, pt.forward.z);
-            }
+            const pt = roadPoints[Math.min(npc.roadIndex, maxIdx)];
+            const mopedAngle = Math.atan2(pt.forward.x, pt.forward.z);
 
             // Angle from NPC to camera
             const toCamAngle = Math.atan2(camPos.x - npc.position.x, camPos.z - npc.position.z);

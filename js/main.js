@@ -101,8 +101,6 @@ scene.add(camera);
 
 let lastSpawnedChunkId = -1;
 const spawnedChunkIds = new Set();
-const spawnedIntersectionIds = new Set();
-
 function spawnNPCsForNewChunks() {
     const newChunks = road.getNewChunks(lastSpawnedChunkId);
     for (const chunk of newChunks) {
@@ -110,15 +108,6 @@ function spawnNPCsForNewChunks() {
             const spawnPositions = road._spawnPositionsForChunk(chunk);
             killableNPCs.spawnFromChunk(chunk.id, spawnPositions, road.points);
             spawnedChunkIds.add(chunk.id);
-
-            // Spawn cross-traffic at intersections within this chunk
-            for (const ix of road.getIntersections()) {
-                if (ix.pointIndex >= chunk.startIdx && ix.pointIndex < chunk.endIdx
-                    && !spawnedIntersectionIds.has(ix.pointIndex)) {
-                    killableNPCs.spawnCrossTraffic(ix);
-                    spawnedIntersectionIds.add(ix.pointIndex);
-                }
-            }
         }
         if (chunk.id > lastSpawnedChunkId) lastSpawnedChunkId = chunk.id;
     }
@@ -305,12 +294,6 @@ function gameLoop() {
         vehicle.applyImpact(0.15);
         cockpit.addBloodSplatter(1.0);
         hud.addKill();
-    }
-
-    // Check gas station refueling
-    const gasStation = road.getGasStationAt(vehicle.position);
-    if (gasStation && Math.abs(vehicle.speed) < 2) {
-        hud.refuel(dt);
     }
 
     // Update foliage (distance culling + billboards)
