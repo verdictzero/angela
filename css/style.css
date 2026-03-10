@@ -355,14 +355,14 @@ body {
 }
 
 #touch-steer {
-    width: 140px;
-    height: 140px;
+    width: 280px;
+    height: 280px;
 }
 
 #joystick-base {
-    width: 140px;
-    height: 140px;
-    border-radius: 70px;
+    width: 280px;
+    height: 280px;
+    border-radius: 140px;
     background: rgba(255, 255, 255, 0.1);
     border: 2px solid rgba(255, 255, 255, 0.25);
     position: relative;
@@ -372,9 +372,9 @@ body {
 }
 
 #joystick-thumb {
-    width: 56px;
-    height: 56px;
-    border-radius: 28px;
+    width: 112px;
+    height: 112px;
+    border-radius: 56px;
     background: rgba(255, 255, 255, 0.35);
     border: 2px solid rgba(255, 255, 255, 0.5);
     position: absolute;

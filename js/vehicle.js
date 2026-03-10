@@ -55,7 +55,7 @@ const HANDBRAKE_REAR_MU = 0.18;
 // ── Steering ───────────────────────────────────────────────────
 const MAX_STEER_ANGLE = 0.40;       // rad (~23 °) — tighter max angle
 const STEER_SPEED_LOW = 2.0;        // rad/s input rate at low speed
-const STEER_SPEED_HIGH = 0.8;       // rad/s at high speed
+const STEER_SPEED_HIGH = 0.4;       // rad/s at high speed — reduced for stability
 const STEER_RETURN = 5.0;           // self-centering rate
 const MIN_STEER_SPEED = 1.0;        // m/s minimum to steer
 const DRIFT_STEER_BOOST = 1.3;      // counter-steer responsiveness multiplier
