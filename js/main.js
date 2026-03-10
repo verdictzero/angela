@@ -147,6 +147,8 @@ function doResize() {
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
     composer.setSize(window.innerWidth, window.innerHeight);
+    cockpit.updateLayout();
+    cockpit._resizeBloodCanvas();
 }
 
 function onResize() {

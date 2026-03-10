@@ -21,7 +21,7 @@ const WHEEL_Z = -1.2;
 const Z_RATIO_WHEEL = Math.abs(WHEEL_Z) / Math.abs(DASH_Z);
 
 // ── Dashboard ────────────────────────────────────────────────
-const DASH_WIDTH_PAD = 1.15;   // wider than viewport to cover edges during sway
+const DASH_WIDTH_PAD = 1.20;   // wider than viewport to cover edges during sway
 const MIN_DASH_ASPECT = 2.0;   // minimum effective viewport aspect — prevents portrait squish
 
 // ── Steering wheel — centered on red + from dash_notes ──────
@@ -84,11 +84,6 @@ export class Cockpit {
 
         this._loadImages();
         this._buildHeadlights();
-
-        window.addEventListener('resize', () => {
-            this._updateLayout();
-            this._resizeBloodCanvas();
-        });
     }
 
     // ── Blood System Init ─────────────────────────────────────
@@ -220,7 +215,7 @@ export class Cockpit {
             this.dashMesh.renderOrder = 100;
             this.dashMesh.position.z = DASH_Z;
             this.group.add(this.dashMesh);
-            this._updateLayout();
+            this.updateLayout();
         });
 
         loader.load('assets/under_dash.png', (tex) => {
@@ -240,7 +235,7 @@ export class Cockpit {
             this.underDashMesh.renderOrder = 99;
             this.underDashMesh.position.z = DASH_Z;
             this.group.add(this.underDashMesh);
-            this._updateLayout();
+            this.updateLayout();
         });
 
         loader.load('assets/steering_wheel.png', (tex) => {
@@ -260,7 +255,7 @@ export class Cockpit {
             this.wheelMesh.renderOrder = 102;
             this.wheelMesh.position.z = WHEEL_Z;
             this.group.add(this.wheelMesh);
-            this._updateLayout();
+            this.updateLayout();
         });
     }
 
@@ -279,7 +274,7 @@ export class Cockpit {
         return { x: camX * zRatio, y: camY * zRatio };
     }
 
-    _updateLayout() {
+    updateLayout() {
         if (!this.dashMesh) return;
 
         const fov = this.camera.fov * Math.PI / 180;
