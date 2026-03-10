@@ -1,11 +1,11 @@
 /**
- * RWD Vehicle Physics — Bicycle Model
+ * AWD Vehicle Physics — Bicycle Model
  *
- * Realistic rear-wheel-drive physics with:
+ * Realistic all-wheel-drive physics with:
  *   - Two-axle bicycle model (front/rear slip angles)
  *   - Pacejka-inspired tire force curve (linear → peak → falloff)
  *   - Dynamic weight transfer under acceleration and braking
- *   - RWD power delivery with friction-circle grip limiting
+ *   - AWD power delivery with friction-circle grip limiting on both axles
  *   - Handbrake locks rear wheels for drift initiation
  *   - Counter-steer friendly oversteer dynamics
  *   - Kinematic low-speed blending for parking maneuvers
@@ -15,7 +15,7 @@ import * as THREE from 'three';
 import { clamp, lerp } from './utils.js';
 
 // ── Vehicle Body ───────────────────────────────────────────────
-const MASS = 1250;                  // kg — sporty RWD coupe
+const MASS = 1250;                  // kg — sporty AWD coupe
 const INERTIA = 2400;               // kg·m² yaw moment of inertia
 const WHEELBASE = 2.65;             // m front-to-rear axle
 const FRONT_DIST = 1.47;            // m CG to front axle
@@ -23,12 +23,14 @@ const REAR_DIST = 1.18;             // m CG to rear axle (rear-biased weight)
 const CG_HEIGHT = 0.52;             // m center of gravity height
 const GRAVITY = 9.81;
 
-// ── Engine / Drivetrain (RWD) ──────────────────────────────────
-const MAX_ENGINE_FORCE = 11000;     // N peak at rear wheels
+// ── Engine / Drivetrain (AWD) ──────────────────────────────────
+const MAX_ENGINE_FORCE = 11000;     // N peak total (split across axles)
 const BOOST_ENGINE_MULT = 1.55;
 const MAX_SPEED = 100;              // m/s (~360 km/h) soft limit
 const BOOST_MAX_SPEED = 140;
 const REVERSE_FORCE_FRAC = 0.30;   // reverse is 30 % of forward power
+const AWD_FRONT_SPLIT = 0.40;      // 40% front / 60% rear torque split
+const AWD_REAR_SPLIT = 0.60;
 
 // ── Braking ────────────────────────────────────────────────────
 const MAX_BRAKE_FORCE = 18000;      // N total
@@ -40,12 +42,12 @@ const DRAG_COEFF = 0.42;            // Cd·A·½ρ lumped
 const ROLLING_RESISTANCE = 90;      // N constant
 
 // ── Tire Model (Pacejka-lite) ──────────────────────────────────
-const CS_FRONT = 78000;             // N/rad cornering stiffness
-const CS_REAR = 86000;
-const MU_FRONT = 1.35;              // peak grip coefficient (sticky rubber)
-const MU_REAR = 1.28;
+const CS_FRONT = 110000;            // N/rad cornering stiffness (high-perf tires)
+const CS_REAR = 120000;
+const MU_FRONT = 1.95;              // peak grip coefficient (race compound)
+const MU_REAR = 1.90;
 const PACEJKA_C = 1.45;             // shape factor (higher = sharper peak)
-const GRIP_MIN_FRAC = 0.08;         // minimum lateral grip even when spinning
+const GRIP_MIN_FRAC = 0.15;         // minimum lateral grip even when spinning
 
 // Handbrake — dramatically kills rear grip for drift initiation
 const HANDBRAKE_REAR_MU = 0.18;
@@ -72,7 +74,7 @@ const DRIFT_SLIP_THRESHOLD = 0.10;  // rad (~6 °) rear slip to flag "drifting"
 const DRIFT_SLIP_MAX = 0.85;        // clamp visual drift angle
 
 // ── Surface friction multipliers ───────────────────────────────
-const SURFACE_MU = { road: 1.0, shoulder: 0.65, sidewalk: 0.50, offRoad: 0.35 };
+const SURFACE_MU = { road: 1.0, shoulder: 0.75, sidewalk: 0.60, offRoad: 0.45 };
 
 // ────────────────────────────────────────────────────────────────
 // Pacejka-lite lateral tire force
@@ -266,19 +268,33 @@ export class Vehicle {
         let fLatF = tireLateral(alphaF, CS_FRONT, gripF) * dynBlend;
         let fLatR = tireLateral(alphaR, CS_REAR, gripR) * dynBlend;
 
-        // ── Friction circle (rear drive wheel) ──────────────────
-        // Drive force eats into available lateral grip
-        const clampedDrive = clamp(engineForce, 0, gripR);
-        const usageFrac = clampedDrive / Math.max(gripR, 1);
-        const latBudget = gripR * Math.max(
+        // ── Friction circle (AWD — both axles) ────────────────────
+        // Split drive force between front and rear axles
+        const driveF = engineForce * AWD_FRONT_SPLIT;
+        const driveR = engineForce * AWD_REAR_SPLIT;
+
+        const clampedDriveF = clamp(driveF, 0, gripF);
+        const clampedDriveR = clamp(driveR, 0, gripR);
+
+        // Front friction circle
+        const usageFracF = clampedDriveF / Math.max(gripF, 1);
+        const latBudgetF = gripF * Math.max(
             GRIP_MIN_FRAC,
-            Math.sqrt(Math.max(0, 1 - usageFrac * usageFrac))
+            Math.sqrt(Math.max(0, 1 - usageFracF * usageFracF))
         );
-        fLatR = clamp(fLatR, -latBudget, latBudget);
+        fLatF = clamp(fLatF, -latBudgetF, latBudgetF);
+
+        // Rear friction circle
+        const usageFracR = clampedDriveR / Math.max(gripR, 1);
+        const latBudgetR = gripR * Math.max(
+            GRIP_MIN_FRAC,
+            Math.sqrt(Math.max(0, 1 - usageFracR * usageFracR))
+        );
+        fLatR = clamp(fLatR, -latBudgetR, latBudgetR);
 
         // ── Longitudinal forces ─────────────────────────────────
-        // Drive (RWD — rear only)
-        let fDrive = clampedDrive;
+        // Drive (AWD — both axles)
+        let fDrive = clampedDriveF + clampedDriveR;
         if (reverseForce > 0) fDrive = -reverseForce;
 
         // Braking
