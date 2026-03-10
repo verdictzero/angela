@@ -1,41 +1,105 @@
 /**
- * Arcade Vehicle Physics
+ * RWD Vehicle Physics — Bicycle Model
  *
- * Simple but fun car controller with acceleration, braking,
- * steering, drift mechanics, and manual/auto transmission.
+ * Realistic rear-wheel-drive physics with:
+ *   - Two-axle bicycle model (front/rear slip angles)
+ *   - Pacejka-inspired tire force curve (linear → peak → falloff)
+ *   - Dynamic weight transfer under acceleration and braking
+ *   - RWD power delivery with friction-circle grip limiting
+ *   - Handbrake locks rear wheels for drift initiation
+ *   - Counter-steer friendly oversteer dynamics
+ *   - Kinematic low-speed blending for parking maneuvers
  */
 
 import * as THREE from 'three';
 import { clamp, lerp } from './utils.js';
 
-const MAX_SPEED = 100;          // m/s (~360 km/h)
-const BOOST_MAX_SPEED = 140;    // m/s (~504 km/h)
-const ACCELERATION = 24;        // m/s^2
-const BRAKE_FORCE = 30;         // m/s^2
-const DRAG = 0.25;              // natural deceleration (terminal ~96 m/s)
-const HANDBRAKE_DRAG = 8;       // reduced — drift bleeds speed more gently
-const STEER_SPEED = 2.5;        // radians/sec at low speed
-const STEER_SPEED_HIGH = 1.0;   // radians/sec at high speed
-const STEER_RETURN = 5.0;       // how fast steering centers
-const MIN_STEER_SPEED = 2;      // need some speed to steer
+// ── Vehicle Body ───────────────────────────────────────────────
+const MASS = 1250;                  // kg — sporty RWD coupe
+const INERTIA = 2400;               // kg·m² yaw moment of inertia
+const WHEELBASE = 2.65;             // m front-to-rear axle
+const FRONT_DIST = 1.18;            // m CG to front axle
+const REAR_DIST = 1.47;             // m CG to rear axle (rear-biased weight)
+const CG_HEIGHT = 0.52;             // m center of gravity height
+const GRAVITY = 9.81;
 
-// Drift constants
-const DRIFT_BUILDUP = 3.0;      // how fast drift angle builds
-const DRIFT_MAX_ANGLE = 0.7;    // max radians of drift slip angle
-const DRIFT_RECOVERY = 2.5;     // how fast drift recovers when e-brake released
-const DRIFT_STEER_BOOST = 1.8;  // steering multiplier during drift
-const DRIFT_MIN_SPEED = 8;      // minimum speed to initiate drift
+// ── Engine / Drivetrain (RWD) ──────────────────────────────────
+const MAX_ENGINE_FORCE = 11000;     // N peak at rear wheels
+const BOOST_ENGINE_MULT = 1.55;
+const MAX_SPEED = 100;              // m/s (~360 km/h) soft limit
+const BOOST_MAX_SPEED = 140;
+const REVERSE_FORCE_FRAC = 0.30;   // reverse is 30 % of forward power
 
-// Transmission — 7-speed gear thresholds in m/s
+// ── Braking ────────────────────────────────────────────────────
+const MAX_BRAKE_FORCE = 18000;      // N total
+const BRAKE_BIAS_FRONT = 0.62;
+const BRAKE_BIAS_REAR = 0.38;
+
+// ── Aerodynamics ───────────────────────────────────────────────
+const DRAG_COEFF = 0.42;            // Cd·A·½ρ lumped
+const ROLLING_RESISTANCE = 90;      // N constant
+
+// ── Tire Model (Pacejka-lite) ──────────────────────────────────
+const CS_FRONT = 78000;             // N/rad cornering stiffness
+const CS_REAR = 86000;
+const MU_FRONT = 1.35;              // peak grip coefficient (sticky rubber)
+const MU_REAR = 1.28;
+const PACEJKA_C = 1.45;             // shape factor (higher = sharper peak)
+const GRIP_MIN_FRAC = 0.08;         // minimum lateral grip even when spinning
+
+// Handbrake — dramatically kills rear grip for drift initiation
+const HANDBRAKE_REAR_MU = 0.18;
+
+// ── Steering ───────────────────────────────────────────────────
+const MAX_STEER_ANGLE = 0.55;       // rad (~31 °)
+const STEER_SPEED_LOW = 2.8;        // rad/s input rate at low speed
+const STEER_SPEED_HIGH = 1.2;       // rad/s at high speed
+const STEER_RETURN = 5.0;           // self-centering rate
+const MIN_STEER_SPEED = 1.0;        // m/s minimum to steer
+const DRIFT_STEER_BOOST = 1.5;      // counter-steer responsiveness multiplier
+
+// ── Stability helpers ──────────────────────────────────────────
+const YAW_DAMPING = 700;            // N·m·s/rad prevents oscillation
+const LOW_SPEED_BLEND = 3.5;        // m/s — below this, blend kinematic model
+const LOW_SPEED_LAT_DAMP = 6.0;     // artificial lateral kill at crawl speed
+
+// ── Transmission ───────────────────────────────────────────────
 const GEAR_SHIFTS = [0, 8, 18, 30, 45, 62, 80];
 const GEAR_COUNT = 7;
 
+// ── Drift detection ────────────────────────────────────────────
+const DRIFT_SLIP_THRESHOLD = 0.10;  // rad (~6 °) rear slip to flag "drifting"
+const DRIFT_SLIP_MAX = 0.85;        // clamp visual drift angle
+
+// ── Surface friction multipliers ───────────────────────────────
+const SURFACE_MU = { road: 1.0, shoulder: 0.65, sidewalk: 0.50, offRoad: 0.35 };
+
+// ────────────────────────────────────────────────────────────────
+// Pacejka-lite lateral tire force
+//   F = −D · sin(C · atan(B · α))
+// where D = peak grip,  B = Cα / (C · D)
+// Returns force opposing the slip (negative α → positive force).
+// ────────────────────────────────────────────────────────────────
+function tireLateral(alpha, cAlpha, peakGrip) {
+    if (peakGrip < 1) return 0;
+    const B = cAlpha / (PACEJKA_C * peakGrip);
+    return -peakGrip * Math.sin(PACEJKA_C * Math.atan(B * alpha));
+}
+
+// ════════════════════════════════════════════════════════════════
 export class Vehicle {
     constructor() {
         this.position = new THREE.Vector3(0, 0.6, 0);
-        this.angle = 0;             // Y-axis rotation (heading)
-        this.speed = 0;             // forward speed (m/s)
-        this.steerAngle = 0;       // current wheel angle
+        this.angle = 0;              // heading (rad, CW from −Z)
+
+        // ── Body-frame velocities ──────────────────────────────
+        this.vForward = 0;           // m/s along heading (+forward)
+        this.vLateral = 0;           // m/s perpendicular (+right)
+        this.yawRate = 0;            // rad/s (+CW / right turn)
+
+        // ── Public compat (used by HUD, cockpit, camera, NPCs) ─
+        this.speed = 0;
+        this.steerAngle = 0;
         this.velocity = new THREE.Vector3();
 
         // Health
@@ -45,42 +109,36 @@ export class Vehicle {
         this.shakeAmount = 0;
         this.shakeOffset = new THREE.Vector3();
 
-        // For HUD
+        // HUD
         this.speedKmh = 0;
 
-        // Drift state
-        this.driftAngle = 0;        // current slip angle (radians)
-        this.drifting = false;       // is the car actively drifting
+        // Drift state — derived each frame from actual tire slip
+        this.driftAngle = 0;
+        this.drifting = false;
 
         // Transmission
-        this.manualMode = false;     // false = auto, true = manual
-        this.currentGear = 1;       // 1-7 (used in manual mode)
-        this.clutchHeld = false;     // clutch pedal state
+        this.manualMode = false;
+        this.currentGear = 1;
+        this.clutchHeld = false;
 
-        // Engine state
+        // Engine
         this.engineRunning = true;
-        this.engineStalled = false;  // true the frame the engine stalls (edge flag)
-        this._wasMoving = false;     // track if vehicle was moving last frame
+        this.engineStalled = false;
+        this._wasMoving = false;
     }
+
+    // ── Transmission helpers (unchanged API) ───────────────────
 
     shiftUp() {
         if (this.currentGear < GEAR_COUNT) {
-            // Stall if shifting without clutch in manual mode
-            if (this.manualMode && !this.clutchHeld) {
-                this.stallEngine();
-                return;
-            }
+            if (this.manualMode && !this.clutchHeld) { this.stallEngine(); return; }
             this.currentGear++;
         }
     }
 
     shiftDown() {
         if (this.currentGear > 1) {
-            // Stall if shifting without clutch in manual mode
-            if (this.manualMode && !this.clutchHeld) {
-                this.stallEngine();
-                return;
-            }
+            if (this.manualMode && !this.clutchHeld) { this.stallEngine(); return; }
             this.currentGear--;
         }
     }
@@ -88,8 +146,8 @@ export class Vehicle {
     stallEngine() {
         if (!this.engineRunning) return;
         this.engineRunning = false;
-        this.engineStalled = true;  // edge flag, consumed by HUD
-        this.speed *= 0.3;          // sudden deceleration
+        this.engineStalled = true;
+        this.vForward *= 0.3;
     }
 
     startEngine() {
@@ -101,18 +159,12 @@ export class Vehicle {
         this.manualMode = !this.manualMode;
     }
 
-    /**
-     * Get current gear — auto selects by speed, manual uses currentGear.
-     */
     getGear() {
         if (!this.manualMode) {
-            const absSpeed = Math.abs(this.speed);
+            const s = Math.abs(this.vForward);
             let gear = 1;
             for (let i = GEAR_SHIFTS.length - 1; i >= 1; i--) {
-                if (absSpeed >= GEAR_SHIFTS[i]) {
-                    gear = i + 1;
-                    break;
-                }
+                if (s >= GEAR_SHIFTS[i]) { gear = i + 1; break; }
             }
             this.currentGear = gear;
             return gear;
@@ -120,170 +172,258 @@ export class Vehicle {
         return this.currentGear;
     }
 
-    /**
-     * Get acceleration multiplier based on gear/speed mismatch in manual mode.
-     * In auto mode, always returns 1.
-     */
     _getGearEfficiency() {
-        if (!this.manualMode || this.clutchHeld) return this.clutchHeld ? 0 : 1;
-
-        const absSpeed = Math.abs(this.speed);
-        const gearIdx = this.currentGear - 1;
-        const lo = GEAR_SHIFTS[gearIdx];
-        const hi = gearIdx + 1 < GEAR_SHIFTS.length ? GEAR_SHIFTS[gearIdx + 1] : MAX_SPEED;
-
-        // Efficiency drops if speed is way outside this gear's range
-        if (absSpeed < lo * 0.5) return 0.3;  // too high a gear for this speed
-        if (absSpeed > hi * 1.3) return 0.5;  // over-revving
+        if (this.clutchHeld) return 0;
+        if (!this.manualMode) return 1;
+        const s = Math.abs(this.vForward);
+        const idx = this.currentGear - 1;
+        const lo = GEAR_SHIFTS[idx];
+        const hi = idx + 1 < GEAR_SHIFTS.length ? GEAR_SHIFTS[idx + 1] : MAX_SPEED;
+        if (s < lo * 0.5) return 0.3;
+        if (s > hi * 1.3) return 0.5;
         return 1.0;
     }
 
+    // ── Main physics tick ──────────────────────────────────────
+
     update(dt, input, roadInfo) {
-        // Clear edge flag from previous frame
         this.engineStalled = false;
 
         const gear = this.getGear();
         const gearEff = this._getGearEfficiency();
-
-        // Clutch state (read early so stall checks use current frame)
         this.clutchHeld = input.clutch;
 
-        // Stall check: fully stopping in manual mode without clutch
-        if (this.engineRunning && this.manualMode && !this.clutchHeld && this._wasMoving && Math.abs(this.speed) < 0.5) {
+        // Stall-on-stop in manual
+        if (this.engineRunning && this.manualMode && !this.clutchHeld
+            && this._wasMoving && Math.abs(this.vForward) < 0.5) {
             this.stallEngine();
         }
 
-        // Acceleration / braking — only when engine is running
+        const absVf = Math.abs(this.vForward);
+
+        // ── Surface grip ────────────────────────────────────────
+        let surfaceMu = SURFACE_MU.road;
+        if (roadInfo) {
+            if (roadInfo.offRoad)       surfaceMu = SURFACE_MU.offRoad;
+            else if (roadInfo.onSidewalk) surfaceMu = SURFACE_MU.sidewalk;
+            else if (roadInfo.onShoulder) surfaceMu = SURFACE_MU.shoulder;
+        }
+
+        // ── Desired engine & brake forces ───────────────────────
+        let engineForce = 0;
         if (input.gas > 0 && !this.clutchHeld && this.engineRunning) {
             const maxSpd = input.boost ? BOOST_MAX_SPEED : MAX_SPEED;
-            if (this.speed < maxSpd) {
-                this.speed += ACCELERATION * input.gas * gearEff * dt;
+            const boostM = input.boost ? BOOST_ENGINE_MULT : 1.0;
+            if (this.vForward < maxSpd) {
+                engineForce = MAX_ENGINE_FORCE * input.gas * gearEff * boostM;
             }
         }
 
-        if (input.brake > 0) {
-            if (this.speed > 0) {
-                this.speed -= BRAKE_FORCE * input.brake * dt;
-                if (this.speed < 0) this.speed = 0;
-            } else {
-                // Reverse
-                this.speed -= ACCELERATION * 0.4 * input.brake * dt;
-                this.speed = Math.max(this.speed, -MAX_SPEED * 0.3);
-            }
+        let brakeInput = input.brake;
+        let reverseForce = 0;
+        // Brake → reverse when nearly stopped
+        if (input.brake > 0 && this.vForward < 1.0
+            && this.engineRunning && !this.clutchHeld) {
+            reverseForce = MAX_ENGINE_FORCE * REVERSE_FORCE_FRAC * input.brake * gearEff;
+            if (this.vForward < 0.5) brakeInput = 0;
         }
 
-        // ── Drift / E-brake ──────────────────────────────────
-        const absSpeed = Math.abs(this.speed);
-        const wasDrifting = this.drifting;
+        const totalBrake = MAX_BRAKE_FORCE * brakeInput;
 
-        if (input.handbrake && absSpeed > DRIFT_MIN_SPEED) {
-            // E-brake engaged: build drift angle based on steering
-            this.drifting = true;
-            const steerInfluence = this.steerAngle * DRIFT_BUILDUP * dt;
-            this.driftAngle += steerInfluence;
-            this.driftAngle = clamp(this.driftAngle, -DRIFT_MAX_ANGLE, DRIFT_MAX_ANGLE);
+        // ── Weight transfer ─────────────────────────────────────
+        const netLong = engineForce - totalBrake * Math.sign(Math.max(this.vForward, 0.01));
+        const wt = clamp(
+            MASS * (netLong / MASS) * CG_HEIGHT / WHEELBASE,
+            -MASS * GRAVITY * 0.35,
+             MASS * GRAVITY * 0.35
+        );
+        const wFront = Math.max(200, MASS * GRAVITY * REAR_DIST / WHEELBASE - wt);
+        const wRear  = Math.max(200, MASS * GRAVITY * FRONT_DIST / WHEELBASE + wt);
 
-            // Slower speed bleed during drift (feels like sliding, not braking)
-            this.speed -= Math.sign(this.speed) * HANDBRAKE_DRAG * dt;
-            if (Math.abs(this.speed) < 1) this.speed = 0;
+        // ── Slip angles ─────────────────────────────────────────
+        // Guard against near-zero forward speed
+        const vfSafe = Math.max(absVf, 0.5);
+        // Ramp tire forces from 0→1 over 0.5→LOW_SPEED_BLEND m/s
+        const dynBlend = clamp((absVf - 0.5) / (LOW_SPEED_BLEND - 0.5), 0, 1);
 
-            // Shake during drift
-            this.shakeAmount = Math.max(this.shakeAmount, absSpeed * 0.002);
-        } else {
-            // Recover drift angle toward zero
-            if (Math.abs(this.driftAngle) > 0.01) {
-                this.driftAngle = lerp(this.driftAngle, 0, DRIFT_RECOVERY * dt);
-            } else {
-                this.driftAngle = 0;
-                this.drifting = false;
-            }
-
-            // Normal handbrake (at low speed or no steering)
-            if (input.handbrake) {
-                this.speed -= Math.sign(this.speed) * HANDBRAKE_DRAG * 2 * dt;
-                if (Math.abs(this.speed) < 1) this.speed = 0;
-            }
+        let alphaF = 0, alphaR = 0;
+        if (absVf > 0.5) {
+            const signVf = this.vForward >= 0 ? 1 : -1;
+            alphaF = Math.atan2(
+                this.vLateral + FRONT_DIST * this.yawRate, vfSafe
+            ) - this.steerAngle * signVf;
+            alphaR = Math.atan2(
+                this.vLateral - REAR_DIST * this.yawRate, vfSafe
+            );
         }
 
-        // Drag
-        this.speed -= this.speed * DRAG * dt;
+        // ── Peak grip budgets ───────────────────────────────────
+        const gripF = wFront * MU_FRONT * surfaceMu;
+        const rearMu = input.handbrake ? HANDBRAKE_REAR_MU : MU_REAR;
+        const gripR = wRear * rearMu * surfaceMu;
 
-        // Surface effects
-        if (roadInfo) {
-            if (roadInfo.onShoulder) {
-                this.speed *= (1 - 0.3 * dt);
-                this.shakeAmount = Math.max(this.shakeAmount, Math.abs(this.speed) * 0.002);
-            } else if (roadInfo.onSidewalk) {
-                this.speed *= (1 - 0.8 * dt);
-                this.shakeAmount = Math.max(this.shakeAmount, Math.abs(this.speed) * 0.003);
-            } else if (roadInfo.offRoad) {
-                this.speed *= (1 - 1.5 * dt);
-                this.shakeAmount = Math.max(this.shakeAmount, Math.abs(this.speed) * 0.005);
-            }
+        // ── Lateral tire forces (Pacejka-lite) ──────────────────
+        let fLatF = tireLateral(alphaF, CS_FRONT, gripF) * dynBlend;
+        let fLatR = tireLateral(alphaR, CS_REAR, gripR) * dynBlend;
+
+        // ── Friction circle (rear drive wheel) ──────────────────
+        // Drive force eats into available lateral grip
+        const clampedDrive = clamp(engineForce, 0, gripR);
+        const usageFrac = clampedDrive / Math.max(gripR, 1);
+        const latBudget = gripR * Math.max(
+            GRIP_MIN_FRAC,
+            Math.sqrt(Math.max(0, 1 - usageFrac * usageFrac))
+        );
+        fLatR = clamp(fLatR, -latBudget, latBudget);
+
+        // ── Longitudinal forces ─────────────────────────────────
+        // Drive (RWD — rear only)
+        let fDrive = clampedDrive;
+        if (reverseForce > 0) fDrive = -reverseForce;
+
+        // Braking
+        let fBrakeF = 0, fBrakeR = 0;
+        if (brakeInput > 0 && absVf > 0.3) {
+            const s = Math.sign(this.vForward);
+            fBrakeF = -s * totalBrake * BRAKE_BIAS_FRONT;
+            fBrakeR = -s * totalBrake * BRAKE_BIAS_REAR;
         }
 
-        // Steering
-        if (absSpeed > MIN_STEER_SPEED) {
-            const speedFactor = clamp(1 - absSpeed / MAX_SPEED, 0, 1);
-            let steerRate = lerp(STEER_SPEED_HIGH, STEER_SPEED, speedFactor);
-            // Boost steering during drift for better control
+        // Handbrake extra longitudinal drag
+        if (input.handbrake && absVf > 0.3) {
+            fBrakeR -= Math.sign(this.vForward) * wRear * MU_REAR * 0.55;
+        }
+
+        // Aero drag (∝ v²) + rolling resistance
+        const fDrag = -DRAG_COEFF * this.vForward * absVf;
+        const fRoll = absVf > 0.3
+            ? -Math.sign(this.vForward) * ROLLING_RESISTANCE : 0;
+
+        // ── Sum forces (body frame) ─────────────────────────────
+        const cosD = Math.cos(this.steerAngle);
+        const sinD = Math.sin(this.steerAngle);
+
+        // Forward (along heading)
+        const Fx = fDrive + fBrakeF + fBrakeR + fDrag + fRoll
+                 - fLatF * sinD;   // lateral-to-longitudinal from steered wheels
+
+        // Lateral (perpendicular, +right)
+        const Fy = fLatF * cosD + fLatR;
+
+        // ── Yaw torque ──────────────────────────────────────────
+        // Front lateral → turning torque, rear lateral → restoring torque
+        const Mz = (fLatF * cosD) * FRONT_DIST - fLatR * REAR_DIST;
+        const yawDamp = -YAW_DAMPING * this.yawRate;
+
+        // ── Integrate (rotating body frame) ─────────────────────
+        // m·(dvx − vy·r) = Fx  →  dvx = Fx/m + vy·r
+        // m·(dvy + vx·r) = Fy  →  dvy = Fy/m − vx·r
+        // I·dr = Mz + damping
+        const ax = Fx / MASS + this.vLateral * this.yawRate;
+        const ay = Fy / MASS - this.vForward * this.yawRate;
+        const ar = (Mz + yawDamp) / INERTIA;
+
+        this.vForward += ax * dt;
+        this.vLateral += ay * dt;
+        this.yawRate  += ar * dt;
+
+        // ── Low-speed kinematic blending ────────────────────────
+        // Below LOW_SPEED_BLEND, fade in an Ackermann-based yaw rate
+        // so the car steers naturally in a parking lot.
+        if (absVf > MIN_STEER_SPEED && absVf < LOW_SPEED_BLEND) {
+            const kinYaw = this.vForward * Math.tan(this.steerAngle) / WHEELBASE;
+            const t = 1 - clamp(
+                (absVf - MIN_STEER_SPEED) / (LOW_SPEED_BLEND - MIN_STEER_SPEED), 0, 1
+            );
+            this.yawRate = lerp(this.yawRate, kinYaw, t * 8 * dt);
+        }
+
+        // Damp lateral velocity & yaw at very low speed
+        if (absVf < LOW_SPEED_BLEND) {
+            const k = 1 - (1 - absVf / LOW_SPEED_BLEND) * LOW_SPEED_LAT_DAMP * dt;
+            const d = Math.max(0, k);
+            this.vLateral *= d;
+            // Lighter yaw damping so parking-speed turns still work
+            this.yawRate *= Math.max(0, 1 - (1 - absVf / LOW_SPEED_BLEND) * 2.0 * dt);
+        }
+
+        // ── Velocity clamp ──────────────────────────────────────
+        const totalV = Math.sqrt(this.vForward * this.vForward + this.vLateral * this.vLateral);
+        const vCap = (input.boost ? BOOST_MAX_SPEED : MAX_SPEED) * 1.1;
+        if (totalV > vCap) {
+            const s = vCap / totalV;
+            this.vForward *= s;
+            this.vLateral *= s;
+        }
+
+        // Clean stop
+        if (absVf < 0.25 && Math.abs(this.vLateral) < 0.25
+            && input.gas === 0 && input.brake === 0 && reverseForce === 0) {
+            this.vForward *= 0.90;
+            this.vLateral *= 0.90;
+            this.yawRate  *= 0.90;
+            if (Math.abs(this.vForward) < 0.05) this.vForward = 0;
+            if (Math.abs(this.vLateral) < 0.05) this.vLateral = 0;
+            if (Math.abs(this.yawRate) < 0.005) this.yawRate = 0;
+        }
+
+        // ── Heading update ──────────────────────────────────────
+        this.angle += this.yawRate * dt;
+
+        // ── World-space position ────────────────────────────────
+        const sinA = Math.sin(this.angle);
+        const cosA = Math.cos(this.angle);
+        // Forward dir = (sinA, 0, −cosA),  Right dir = (cosA, 0, sinA)
+        const worldVx = this.vForward * sinA + this.vLateral * cosA;
+        const worldVz = -this.vForward * cosA + this.vLateral * sinA;
+
+        this.position.x += worldVx * dt;
+        this.position.z += worldVz * dt;
+
+        // Ride height (+ sidewalk curb bump)
+        let targetY = 0.6;
+        if (roadInfo && roadInfo.onSidewalk) targetY = 0.75;
+        this.position.y = lerp(this.position.y, targetY, 10 * dt);
+
+        // ── Steering input ──────────────────────────────────────
+        if (absVf > MIN_STEER_SPEED) {
+            const speedFrac = clamp(1 - absVf / MAX_SPEED, 0, 1);
+            let steerRate = lerp(STEER_SPEED_HIGH, STEER_SPEED_LOW, speedFrac);
             if (this.drifting) steerRate *= DRIFT_STEER_BOOST;
             this.steerAngle += input.steer * steerRate * dt;
         }
 
-        // Return steering to center when no input
+        // Self-centering
         if (Math.abs(input.steer) < 0.1) {
             this.steerAngle -= this.steerAngle * STEER_RETURN * dt;
             if (Math.abs(this.steerAngle) < 0.01) this.steerAngle = 0;
         }
+        this.steerAngle = clamp(this.steerAngle, -MAX_STEER_ANGLE, MAX_STEER_ANGLE);
 
-        this.steerAngle = clamp(this.steerAngle, -0.6, 0.6);
+        // ── Derived public state ────────────────────────────────
+        this.speed = this.vForward;
+        this.velocity.set(worldVx, 0, worldVz);
+        this.speedKmh = Math.abs(Math.round(this.vForward * 3.6));
 
-        // Apply steering + drift to heading
-        if (absSpeed > MIN_STEER_SPEED) {
-            const turnFactor = this.speed > 0 ? 1 : -1;
-            // Normal steering turn
-            let turnRate = this.steerAngle * (absSpeed / MAX_SPEED) * turnFactor * dt * 3;
-            // Drift adds extra rotation from the slip angle
-            if (this.drifting) {
-                turnRate += this.driftAngle * dt * 2;
-            }
-            this.angle += turnRate;
+        // Drift detection — from actual rear tire slip
+        const absRearSlip = Math.abs(alphaR);
+        this.drifting = absRearSlip > DRIFT_SLIP_THRESHOLD && absVf > 4;
+        this.driftAngle = clamp(alphaR, -DRIFT_SLIP_MAX, DRIFT_SLIP_MAX);
+
+        // ── Shake ───────────────────────────────────────────────
+        // Surface rumble
+        if (roadInfo) {
+            if (roadInfo.onShoulder)
+                this.shakeAmount = Math.max(this.shakeAmount, absVf * 0.002);
+            else if (roadInfo.onSidewalk)
+                this.shakeAmount = Math.max(this.shakeAmount, absVf * 0.003);
+            else if (roadInfo.offRoad)
+                this.shakeAmount = Math.max(this.shakeAmount, absVf * 0.005);
         }
-
-        // ── Movement ─────────────────────────────────────────
-        const forward = new THREE.Vector3(
-            Math.sin(this.angle), 0, -Math.cos(this.angle)
-        );
-
-        // During drift, movement is a blend of heading and drift direction
-        if (this.drifting && Math.abs(this.driftAngle) > 0.01) {
-            const driftDir = new THREE.Vector3(
-                Math.sin(this.angle - this.driftAngle), 0,
-                -Math.cos(this.angle - this.driftAngle)
-            );
-            const blendedDir = forward.clone().lerp(driftDir, Math.abs(this.driftAngle) / DRIFT_MAX_ANGLE * 0.6);
-            blendedDir.normalize();
-            this.position.x += blendedDir.x * this.speed * dt;
-            this.position.z += blendedDir.z * this.speed * dt;
-        } else {
-            this.position.x += forward.x * this.speed * dt;
-            this.position.z += forward.z * this.speed * dt;
+        // Tire slip shake
+        if (this.drifting) {
+            this.shakeAmount = Math.max(this.shakeAmount, absRearSlip * 0.25);
         }
-
-        // Y position (ride height + sidewalk)
-        let targetY = 0.6;
-        if (roadInfo && roadInfo.onSidewalk) {
-            targetY = 0.6 + 0.15;
-        }
-        this.position.y = lerp(this.position.y, targetY, 10 * dt);
-
-        // Update velocity for external use
-        this.velocity.copy(forward).multiplyScalar(this.speed);
-
-        // Speed for HUD
-        this.speedKmh = Math.abs(Math.round(this.speed * 3.6));
-
         // Shake decay
         this.shakeAmount *= Math.max(0, 1 - 5 * dt);
         this.shakeOffset.set(
@@ -292,20 +432,23 @@ export class Vehicle {
             (Math.random() - 0.5) * this.shakeAmount * 0.3
         );
 
-        // Track whether vehicle was moving (for stall-on-stop detection)
-        this._wasMoving = Math.abs(this.speed) > 1.0;
+        this._wasMoving = Math.abs(this.vForward) > 1.0;
     }
+
+    // ── Impacts (unchanged API) ────────────────────────────────
 
     applyImpact(intensity) {
         this.shakeAmount = Math.max(this.shakeAmount, intensity);
-        this.speed *= 0.95;
+        this.vForward *= 0.95;
     }
 
     applyTreeImpact(speed) {
         const absSpeed = Math.abs(speed);
         const damage = 15 + (absSpeed / MAX_SPEED) * 10;
         this.health = Math.max(0, this.health - damage);
-        this.speed *= 0.05;
+        this.vForward *= 0.05;
+        this.vLateral *= 0.3;
+        this.yawRate  *= 0.3;
         this.shakeAmount = Math.max(this.shakeAmount, 0.5);
     }
 
