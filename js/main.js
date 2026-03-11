@@ -21,6 +21,7 @@ import { DayNightCycle } from './daynight.js';
 
 import { FoliageManager } from './foliage.js';
 import { unlitUniforms } from './shaders.js';
+import { AudioEngine } from './audio.js';
 
 // ── Scene Setup ──────────────────────────────────────────────
 
@@ -93,6 +94,7 @@ const gore = new GoreSystem(scene);
 const hud = new HUD();
 const dayNight = new DayNightCycle(scene);
 const foliage = new FoliageManager(scene, road);
+const audio = new AudioEngine();
 
 // Cockpit is child of camera, add camera to scene
 scene.add(camera);
@@ -120,6 +122,8 @@ const engineStartBtn = document.getElementById('engine-start-btn');
 function tryStartEngine() {
     if (vehicle.engineRunning) return;
     vehicle.startEngine();
+    audio.resume();
+    audio.playEngineStart();
     if (engineStartBtn) engineStartBtn.classList.add('hidden');
 }
 
@@ -146,6 +150,10 @@ const startScreen = document.getElementById('start-screen');
 function startGame() {
     if (gameStarted) return;
     gameStarted = true;
+
+    // Initialize audio on first user gesture
+    audio.init();
+    audio.resume();
 
     // Fade out start screen instead of instant hide
     if (startScreen) {
@@ -284,6 +292,7 @@ function gameLoop() {
     // Check tree collisions
     const treeHit = foliage.checkTreeCollision(vehicle.position, 1.2);
     if (treeHit) {
+        audio.playTreeCrash(Math.abs(vehicle.speed) / 50);
         vehicle.applyTreeImpact(vehicle.speed);
     }
 
@@ -294,6 +303,8 @@ function gameLoop() {
         vehicle.applyImpact(0.15);
         cockpit.addBloodSplatter(1.0);
         hud.addKill();
+        audio.playImpact(0.8);
+        audio.playSplat();
     }
 
     // Update foliage (distance culling + billboards)
@@ -303,6 +314,7 @@ function gameLoop() {
     const chunkHits = gore.update(dt, camera, vehicle.position, vehicle.angle, vehicle.speed);
     for (let i = 0; i < chunkHits; i++) {
         vehicle.applyImpact(0.05);
+        audio.playChunkHit();
     }
 
     // Show/hide engine start button
@@ -316,6 +328,35 @@ function gameLoop() {
 
     // Update cockpit (pass input for wiper/washer controls)
     cockpit.update(dt, vehicle, input);
+
+    // Detect engine stall (vehicle sets engineStalled flag each frame it stalls)
+    if (vehicle.engineStalled) {
+        audio.playEngineStall();
+    }
+
+    // Determine surface type for audio
+    let audioSurface = 'road';
+    if (roadInfo) {
+        if (roadInfo.offRoad) audioSurface = 'offRoad';
+        else if (roadInfo.onSidewalk) audioSurface = 'sidewalk';
+        else if (roadInfo.onShoulder) audioSurface = 'shoulder';
+    }
+
+    // Per-frame audio update — engine, tires, surface rumble
+    audio.update(dt, {
+        speed: vehicle.speed,
+        gear: vehicle.getGear(),
+        gasInput: input.gas,
+        brakeInput: input.brake,
+        engineRunning: vehicle.engineRunning,
+        drifting: vehicle.drifting,
+        driftAngle: vehicle.driftAngle,
+        surface: audioSurface,
+        handbrake: input.handbrake,
+    });
+
+    // NPC proximity moped buzz
+    audio.updateNPCSounds(killableNPCs.npcs, vehicle.position);
 
     // Update camera — LHD offset
     updateCamera(dt);
