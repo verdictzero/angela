@@ -371,15 +371,15 @@ export class Cockpit {
         this.group.add(this._headlightR.target);
 
         // High beams — brighter, longer range, tighter cone, cooler white
-        this._highBeamL = new THREE.SpotLight(0xeeeeff, 0, 250, Math.PI / 8, 0.3, 1);
+        this._highBeamL = new THREE.SpotLight(0xeeeeff, 0, 500, Math.PI / 8, 0.3, 1);
         this._highBeamL.position.set(-0.6, -0.2, -1.8);
-        this._highBeamL.target.position.set(-0.6, -0.5, -40);
+        this._highBeamL.target.position.set(-0.6, 0, -60);
         this.group.add(this._highBeamL);
         this.group.add(this._highBeamL.target);
 
-        this._highBeamR = new THREE.SpotLight(0xeeeeff, 0, 250, Math.PI / 8, 0.3, 1);
+        this._highBeamR = new THREE.SpotLight(0xeeeeff, 0, 500, Math.PI / 8, 0.3, 1);
         this._highBeamR.position.set(0.6, -0.2, -1.8);
-        this._highBeamR.target.position.set(0.6, -0.5, -40);
+        this._highBeamR.target.position.set(0.6, 0, -60);
         this.group.add(this._highBeamR);
         this.group.add(this._highBeamR.target);
 

@@ -398,6 +398,12 @@ body {
     50% { color: #660000; }
 }
 
+/* ── Tach Manual Mode (amber) ────────────────────── */
+#hud-tach.tach-manual {
+    color: #ff9900;
+    text-shadow: 0 0 6px rgba(255, 153, 0, 0.6);
+}
+
 /* Blood Overlay */
 #blood-overlay {
     position: fixed;
@@ -543,6 +549,14 @@ body {
 }
 .touch-btn-blue:active, .touch-btn-blue.pressed {
     background: rgba(0, 80, 180, 0.7);
+}
+
+.touch-btn-disabled {
+    background: rgba(60, 60, 60, 0.4) !important;
+    color: #555 !important;
+    border-color: rgba(80, 80, 80, 0.3) !important;
+    opacity: 0.5;
+    pointer-events: none;
 }
 
 .touch-btn-white {
