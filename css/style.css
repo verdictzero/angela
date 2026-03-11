@@ -38,7 +38,6 @@ body {
     height: 100%;
     z-index: 200;
     display: flex;
-    flex-direction: column;
     justify-content: center;
     align-items: center;
     background: #000;
@@ -50,20 +49,50 @@ body {
     pointer-events: none;
 }
 
+#loading-box {
+    background: #111;
+    border: 1px solid #222;
+    border-radius: 6px;
+    padding: 32px 40px 24px;
+    min-width: 320px;
+    max-width: 90vw;
+}
+
 #loading-text {
+    font-family: '7seg', 'Courier New', monospace;
     font-size: 2.5rem;
-    color: #cc0000;
-    text-shadow: 0 0 20px #ff0000, 0 0 40px #880000;
+    color: #0f0;
+    text-shadow: 0 0 16px rgba(0, 255, 0, 0.5), 0 0 32px rgba(0, 180, 0, 0.3);
     letter-spacing: 0.3em;
     animation: pulse 1.5s ease-in-out infinite;
+    text-align: left;
+}
+
+#loading-bar-track {
+    width: 100%;
+    height: 4px;
+    background: #1a1a1a;
+    border-radius: 2px;
+    margin-top: 14px;
+    overflow: hidden;
+}
+
+#loading-bar-fill {
+    width: 0%;
+    height: 100%;
+    background: #0f0;
+    box-shadow: 0 0 8px rgba(0, 255, 0, 0.4);
+    border-radius: 2px;
+    transition: width 0.3s ease-out;
 }
 
 #loading-status {
-    font-size: 0.7rem;
-    color: #664444;
-    margin-top: 1em;
-    letter-spacing: 0.1em;
-    opacity: 0.6;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 0.75rem;
+    color: #777;
+    margin-top: 12px;
+    letter-spacing: 0.02em;
+    text-align: left;
 }
 
 /* ── Updating UI Overlay ───────────────────────────── */
@@ -537,6 +566,11 @@ body {
 
     #loading-text {
         font-size: 1.8rem;
+    }
+
+    #loading-box {
+        padding: 24px 28px 18px;
+        min-width: 260px;
     }
 
     .hud-slot {

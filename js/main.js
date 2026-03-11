@@ -494,10 +494,18 @@ gameLoop();
 // and HUD DOM layout before fading out.
 const loadingScreen = document.getElementById('loading-screen');
 const loadingStatus = document.getElementById('loading-status');
+const loadingBarFill = document.getElementById('loading-bar-fill');
 const MINIMUM_LOADING_MS = 1500;
 const MAX_LOADING_MS = 8000;
+const TOTAL_LOADING_STEPS = 3;
 const loadStartTime = performance.now();
 let loadingDismissed = false;
+
+function setLoadingProgress(step, label) {
+    const pct = Math.round((step / TOTAL_LOADING_STEPS) * 100);
+    if (loadingStatus) loadingStatus.textContent = `${label} (${step}/${TOTAL_LOADING_STEPS}) ${pct}%`;
+    if (loadingBarFill) loadingBarFill.style.width = `${pct}%`;
+}
 
 function checkReadyToDismiss() {
     if (loadingDismissed) return;
@@ -506,20 +514,21 @@ function checkReadyToDismiss() {
 
     // Safety fallback — dismiss after 8s no matter what
     if (elapsed >= MAX_LOADING_MS) {
+        setLoadingProgress(TOTAL_LOADING_STEPS, 'Ready');
         dismissLoading();
         return;
     }
 
     // Condition 1: minimum display time
     if (elapsed < MINIMUM_LOADING_MS) {
-        if (loadingStatus) loadingStatus.textContent = 'Preparing scene...';
+        setLoadingProgress(0, 'Preparing scene...');
         requestAnimationFrame(checkReadyToDismiss);
         return;
     }
 
     // Condition 2: at least one frame rendered
     if (renderer.info.render.frame < 1) {
-        if (loadingStatus) loadingStatus.textContent = 'Rendering first frame...';
+        setLoadingProgress(1, 'Rendering first frame...');
         requestAnimationFrame(checkReadyToDismiss);
         return;
     }
@@ -528,12 +537,13 @@ function checkReadyToDismiss() {
     const speedEl = document.getElementById('hud-speed');
     const debugEl = document.getElementById('hud-debug');
     if (!speedEl || speedEl.offsetHeight === 0 || !debugEl) {
-        if (loadingStatus) loadingStatus.textContent = 'Laying out UI...';
+        setLoadingProgress(2, 'Laying out UI...');
         requestAnimationFrame(checkReadyToDismiss);
         return;
     }
 
     // All conditions met
+    setLoadingProgress(TOTAL_LOADING_STEPS, 'Ready');
     dismissLoading();
 }
 
