@@ -208,16 +208,16 @@ export class RoadManager {
      * collide with itself at the current tip).
      * Returns true if intersection detected.
      */
-    _wouldSelfIntersect(pos, skipRecent = 80) {
-        const minDist = ROAD_HALF_WIDTH * 2 + SHOULDER_WIDTH * 2 + 4; // ~27m clearance
+    _wouldSelfIntersect(pos, skipRecent = 100) {
+        const minDist = ROAD_HALF_WIDTH * 2 + SHOULDER_WIDTH * 2 + 6; // ~29m clearance
         const minDistSq = minDist * minDist;
         const latestSafe = this.points.length - skipRecent;
         const gx = Math.floor(pos.x / this._gridCellSize);
         const gz = Math.floor(pos.z / this._gridCellSize);
 
-        // Check 3x3 neighborhood of grid cells
-        for (let dx = -1; dx <= 1; dx++) {
-            for (let dz = -1; dz <= 1; dz++) {
+        // Check 5x5 neighborhood of grid cells for wider coverage
+        for (let dx = -2; dx <= 2; dx++) {
+            for (let dz = -2; dz <= 2; dz++) {
                 const key = `${gx + dx},${gz + dz}`;
                 const cell = this._spatialGrid.get(key);
                 if (!cell) continue;
@@ -227,6 +227,133 @@ export class RoadManager {
                     const other = this.points[idx].position;
                     const ddx = pos.x - other.x;
                     const ddz = pos.z - other.z;
+                    if (ddx * ddx + ddz * ddz < minDistSq) return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Check if the line segment from A to B crosses any existing road segment.
+     * Uses 2D line-segment intersection test on the XZ plane.
+     */
+    _segmentCrossesRoad(ax, az, bx, bz, skipRecent = 100) {
+        const latestSafe = this.points.length - skipRecent;
+        if (latestSafe < 2) return false;
+
+        const gx1 = Math.floor(Math.min(ax, bx) / this._gridCellSize) - 1;
+        const gx2 = Math.floor(Math.max(ax, bx) / this._gridCellSize) + 1;
+        const gz1 = Math.floor(Math.min(az, bz) / this._gridCellSize) - 1;
+        const gz2 = Math.floor(Math.max(az, bz) / this._gridCellSize) + 1;
+
+        const checked = new Set();
+        for (let gx = gx1; gx <= gx2; gx++) {
+            for (let gz = gz1; gz <= gz2; gz++) {
+                const cell = this._spatialGrid.get(`${gx},${gz}`);
+                if (!cell) continue;
+                for (let k = 0; k < cell.length; k++) {
+                    const idx = cell[k];
+                    if (idx >= latestSafe || idx < 1) continue;
+                    if (checked.has(idx)) continue;
+                    checked.add(idx);
+                    const p1 = this.points[idx - 1].position;
+                    const p2 = this.points[idx].position;
+                    if (this._segmentsIntersect(ax, az, bx, bz, p1.x, p1.z, p2.x, p2.z)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 2D line-segment intersection test (XZ plane).
+     */
+    _segmentsIntersect(ax, ay, bx, by, cx, cy, dx, dy) {
+        const rx = bx - ax, ry = by - ay;
+        const sx = dx - cx, sy = dy - cy;
+        const denom = rx * sy - ry * sx;
+        if (Math.abs(denom) < 1e-10) return false; // parallel
+        const t = ((cx - ax) * sy - (cy - ay) * sx) / denom;
+        const u = ((cx - ax) * ry - (cy - ay) * rx) / denom;
+        return t > 0.01 && t < 0.99 && u > 0.01 && u < 0.99;
+    }
+
+    /**
+     * Get the minimum distance to any existing road point (excluding recent).
+     * Returns Infinity if no nearby points.
+     */
+    _nearestRoadDistance(pos, skipRecent = 100) {
+        let minDistSq = Infinity;
+        const latestSafe = this.points.length - skipRecent;
+        const gx = Math.floor(pos.x / this._gridCellSize);
+        const gz = Math.floor(pos.z / this._gridCellSize);
+
+        for (let dx = -2; dx <= 2; dx++) {
+            for (let dz = -2; dz <= 2; dz++) {
+                const key = `${gx + dx},${gz + dz}`;
+                const cell = this._spatialGrid.get(key);
+                if (!cell) continue;
+                for (let k = 0; k < cell.length; k++) {
+                    const idx = cell[k];
+                    if (idx >= latestSafe) continue;
+                    const other = this.points[idx].position;
+                    const ddx = pos.x - other.x;
+                    const ddz = pos.z - other.z;
+                    const dsq = ddx * ddx + ddz * ddz;
+                    if (dsq < minDistSq) minDistSq = dsq;
+                }
+            }
+        }
+        return Math.sqrt(minDistSq);
+    }
+
+    /**
+     * Simulate several points ahead from a given state to check if
+     * committing to this direction would cause intersection soon.
+     * Returns true if look-ahead detects a future intersection.
+     */
+    _lookAheadIntersects(startPos, angle, curvature, steps = 8) {
+        let px = startPos.x, pz = startPos.z;
+        let a = angle, c = curvature;
+        for (let i = 0; i < steps; i++) {
+            a += c;
+            const nx = px + Math.sin(a) * POINT_SPACING;
+            const nz = pz - Math.cos(a) * POINT_SPACING;
+            // Check proximity
+            const testPos = { x: nx, z: nz };
+            if (this._wouldSelfIntersectXZ(nx, nz, 100 + i)) return true;
+            // Check segment crossing
+            if (this._segmentCrossesRoad(px, pz, nx, nz, 100 + i)) return true;
+            px = nx;
+            pz = nz;
+        }
+        return false;
+    }
+
+    /**
+     * Lightweight XZ-only proximity check (avoids creating Vector3).
+     */
+    _wouldSelfIntersectXZ(x, z, skipRecent = 100) {
+        const minDist = ROAD_HALF_WIDTH * 2 + SHOULDER_WIDTH * 2 + 6;
+        const minDistSq = minDist * minDist;
+        const latestSafe = this.points.length - skipRecent;
+        const gx = Math.floor(x / this._gridCellSize);
+        const gz = Math.floor(z / this._gridCellSize);
+
+        for (let dx = -2; dx <= 2; dx++) {
+            for (let dz = -2; dz <= 2; dz++) {
+                const key = `${gx + dx},${gz + dz}`;
+                const cell = this._spatialGrid.get(key);
+                if (!cell) continue;
+                for (let k = 0; k < cell.length; k++) {
+                    const idx = cell[k];
+                    if (idx >= latestSafe) continue;
+                    const other = this.points[idx].position;
+                    const ddx = x - other.x;
+                    const ddz = z - other.z;
                     if (ddx * ddx + ddz * ddz < minDistSq) return true;
                 }
             }
@@ -260,10 +387,19 @@ export class RoadManager {
                 if (this._turnPhase === 'none') {
                     this._turnCooldown--;
                     if (this._turnCooldown <= 0) {
-                        this._turnPattern = this._pickTurnPattern();
-                        this._turnDirection = Math.random() < 0.5 ? 1 : -1;
-                        this._turnPhase = 'leadin';
-                        this._turnPhaseRemaining = 15;
+                        // Don't start a new turn if we're near existing road
+                        const preCheckDist = this._nearestRoadDistance(
+                            { x: last.x, z: last.z }, 100
+                        );
+                        if (preCheckDist < ROAD_HALF_WIDTH * 4 + SHOULDER_WIDTH * 2 + 30) {
+                            // Too close to existing road — postpone the turn
+                            this._turnCooldown = 40;
+                        } else {
+                            this._turnPattern = this._pickTurnPattern();
+                            this._turnDirection = Math.random() < 0.5 ? 1 : -1;
+                            this._turnPhase = 'leadin';
+                            this._turnPhaseRemaining = 15;
+                        }
                     }
                 }
 
@@ -305,8 +441,32 @@ export class RoadManager {
                 this.targetCurvature = clamp(this.targetCurvature, -curvatureClampMax, curvatureClampMax);
                 this.currentCurvature += (this.targetCurvature - this.currentCurvature) * smoothRate;
 
-                // ── Self-intersection avoidance ──
-                // Try the desired angle; if it intersects, nudge away
+                // ── Proactive self-intersection avoidance ──
+                // Check proximity to existing road and dampen curvature proactively
+                const probeDist = this._nearestRoadDistance(
+                    { x: last.x, z: last.z }, 100
+                );
+                const warningDist = ROAD_HALF_WIDTH * 4 + SHOULDER_WIDTH * 2 + 20; // ~63m warning zone
+                const dangerDist = ROAD_HALF_WIDTH * 2 + SHOULDER_WIDTH * 2 + 10;  // ~33m danger zone
+                if (probeDist < warningDist && probeDist > dangerDist) {
+                    // In warning zone: reduce turn aggressiveness
+                    const dampFactor = (probeDist - dangerDist) / (warningDist - dangerDist);
+                    this.targetCurvature *= dampFactor;
+                    curvatureClampMax *= dampFactor;
+                    // Re-clamp after damping
+                    this.targetCurvature = clamp(this.targetCurvature, -curvatureClampMax, curvatureClampMax);
+                    this.currentCurvature += (this.targetCurvature - this.currentCurvature) * smoothRate;
+                } else if (probeDist <= dangerDist) {
+                    // In danger zone: force straightening and abort turn
+                    this.targetCurvature = 0;
+                    this.currentCurvature *= 0.3;
+                    if (this._turnPhase === 'exec') {
+                        this._turnPhase = 'leadout';
+                        this._turnPhaseRemaining = 15;
+                    }
+                }
+
+                // ── Self-intersection check with segment crossing ──
                 const savedAngle = this.currentAngle;
                 const savedCurvature = this.currentCurvature;
                 this.currentAngle += this.currentCurvature;
@@ -317,24 +477,30 @@ export class RoadManager {
                     last.z - Math.cos(this.currentAngle) * POINT_SPACING
                 );
 
-                if (this._wouldSelfIntersect(candidatePos)) {
-                    // Try steering away: test several correction angles
+                // Combined check: proximity + segment crossing + look-ahead
+                const intersects = this._wouldSelfIntersect(candidatePos) ||
+                    this._segmentCrossesRoad(last.x, last.z, candidatePos.x, candidatePos.z) ||
+                    this._lookAheadIntersects(candidatePos, this.currentAngle, this.currentCurvature, 6);
+
+                if (intersects) {
+                    // Try steering away: 20 correction attempts with larger range
                     let resolved = false;
-                    for (let attempt = 1; attempt <= 8; attempt++) {
+                    for (let attempt = 1; attempt <= 20; attempt++) {
                         // Alternate left/right corrections of increasing magnitude
                         const sign = (attempt % 2 === 0) ? 1 : -1;
-                        const nudge = sign * attempt * 0.03;
+                        const nudge = sign * attempt * 0.04; // larger steps, up to ±0.4 rad (~23°)
                         this.currentAngle = savedAngle + savedCurvature + nudge;
                         candidatePos = new THREE.Vector3(
                             last.x + Math.sin(this.currentAngle) * POINT_SPACING,
                             0,
                             last.z - Math.cos(this.currentAngle) * POINT_SPACING
                         );
-                        if (!this._wouldSelfIntersect(candidatePos)) {
-                            // Accept this corrected angle and reset curvature toward straight
-                            this.currentCurvature = nudge * 0.5;
+                        // Verify the corrected direction is also safe in look-ahead
+                        if (!this._wouldSelfIntersect(candidatePos) &&
+                            !this._segmentCrossesRoad(last.x, last.z, candidatePos.x, candidatePos.z) &&
+                            !this._lookAheadIntersects(candidatePos, this.currentAngle, 0, 4)) {
+                            this.currentCurvature = nudge * 0.4;
                             this.targetCurvature = 0;
-                            // Abort any active turn pattern to prevent further intersection
                             if (this._turnPhase === 'exec') {
                                 this._turnPhase = 'leadout';
                                 this._turnPhaseRemaining = 15;
@@ -344,8 +510,24 @@ export class RoadManager {
                         }
                     }
                     if (!resolved) {
-                        // Last resort: hard steer to go straight ahead
-                        this.currentAngle = savedAngle;
+                        // Full 360° sweep in 15° increments to find ANY safe direction
+                        const step = Math.PI / 12; // 15 degrees
+                        let bestAngle = savedAngle;
+                        let bestDist = 0;
+                        for (let a = 0; a < Math.PI * 2; a += step) {
+                            const testAngle = savedAngle + a;
+                            const tx = last.x + Math.sin(testAngle) * POINT_SPACING;
+                            const tz = last.z - Math.cos(testAngle) * POINT_SPACING;
+                            if (!this._wouldSelfIntersectXZ(tx, tz) &&
+                                !this._segmentCrossesRoad(last.x, last.z, tx, tz)) {
+                                const dist = this._nearestRoadDistance({ x: tx, z: tz }, 100);
+                                if (dist > bestDist) {
+                                    bestDist = dist;
+                                    bestAngle = testAngle;
+                                }
+                            }
+                        }
+                        this.currentAngle = bestAngle;
                         this.currentCurvature = 0;
                         this.targetCurvature = 0;
                         candidatePos = new THREE.Vector3(
@@ -353,10 +535,12 @@ export class RoadManager {
                             0,
                             last.z - Math.cos(this.currentAngle) * POINT_SPACING
                         );
-                        if (this._turnPhase === 'exec') {
+                        if (this._turnPhase === 'exec' || this._turnPhase === 'leadin') {
                             this._turnPhase = 'leadout';
-                            this._turnPhaseRemaining = 15;
+                            this._turnPhaseRemaining = 20;
                         }
+                        // Increase cooldown to keep road straight after recovery
+                        this._turnCooldown = Math.max(this._turnCooldown, 150);
                     }
                 }
 
