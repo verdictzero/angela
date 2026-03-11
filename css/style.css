@@ -285,19 +285,56 @@ body {
     text-shadow: 0 0 6px rgba(255, 0, 0, 0.4);
 }
 
-/* ── Shift Light ─────────────────────────────────── */
-#shift-light {
+/* ── Shift Indicator (light + arrows) ────────────── */
+#shift-indicator {
     position: fixed;
     top: 60px;
     right: 20px;
     z-index: 55;
+    display: flex;
+    gap: 4px;
+    pointer-events: none;
+}
+
+#shift-light {
     font-family: '7seg', 'Courier New', monospace;
     font-size: clamp(0.7rem, 1.4vw, 1rem);
     padding: 6px 14px;
     border-radius: 4px;
     letter-spacing: 0.15em;
-    pointer-events: none;
     transition: background 0.1s, color 0.1s, box-shadow 0.1s;
+}
+
+.shift-arrow {
+    font-family: '7seg', 'Courier New', monospace;
+    font-size: clamp(0.7rem, 1.4vw, 1rem);
+    padding: 6px 8px;
+    border-radius: 4px;
+    transition: background 0.1s, color 0.1s, box-shadow 0.1s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.shift-arrow-off {
+    background: rgba(0, 0, 0, 0.6);
+    color: #332b00;
+    border: 1px solid #332b00;
+    text-shadow: none;
+}
+
+.shift-arrow-on {
+    background: rgba(40, 35, 0, 0.85);
+    color: #ffcc00;
+    border: 1px solid #ffcc00;
+    text-shadow: 0 0 8px #ffcc00, 0 0 16px #aa8800;
+    box-shadow: 0 0 12px rgba(255, 204, 0, 0.4);
+    animation: shift-arrow-blink 0.4s ease-in-out infinite;
+}
+
+@keyframes shift-arrow-blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
 }
 
 #shift-light.shift-light-off {

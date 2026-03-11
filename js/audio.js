@@ -405,21 +405,35 @@ export class AudioEngine {
         if (!this._engineNodes) return;
 
         const rpm = this._currentRPM;
-        const wasActive = this._revLimiterActive;
 
         if (rpm > REV_LIMITER_THRESHOLD) {
             this._revLimiterActive = true;
-            this._revLimiterPhase += dt * REV_LIMITER_CUT_RATE;
+            // Quarter-second oscillation cycle (4 Hz)
+            this._revLimiterPhase += dt * 4.0;
 
-            // Rapid gain modulation (simulates misfires)
-            const limiterMod = 0.4 + 0.6 * Math.abs(Math.sin(this._revLimiterPhase * Math.PI));
+            // Oscillate between max frequency and ~92% of max in smooth sine wave
+            // This creates the characteristic "bouncing off the limiter" sound
+            const oscAmount = 0.5 + 0.5 * Math.sin(this._revLimiterPhase * Math.PI * 2);
+            const freqMax = ENGINE_MAX_FREQ;
+            const freqDip = ENGINE_MAX_FREQ * 0.88;
+            const limiterFreq = freqDip + (freqMax - freqDip) * oscAmount;
+
+            // Apply oscillating frequency to all engine oscillators (harmonics preserved)
+            const now = this._ctx.currentTime;
+            this._engineNodes.oscs[0].frequency.setTargetAtTime(limiterFreq, now, 0.01);
+            this._engineNodes.oscs[1].frequency.setTargetAtTime(limiterFreq * 2, now, 0.01);
+            this._engineNodes.oscs[2].frequency.setTargetAtTime(limiterFreq * 0.5, now, 0.01);
+            this._engineNodes.oscs[3].frequency.setTargetAtTime(limiterFreq * 4, now, 0.01);
+
+            // Subtle gain wobble to complement the pitch oscillation (not a hard cut)
+            const gainMod = 0.85 + 0.15 * oscAmount;
             this._engineNodes.bus.gain.setTargetAtTime(
-                this._engineNodes.bus.gain.value * limiterMod,
-                this._ctx.currentTime, 0.005
+                this._engineNodes.bus.gain.value * gainMod,
+                now, 0.01
             );
 
-            // Random pops/bangs
-            if (Math.random() < dt * 25) {
+            // Occasional exhaust pop (less frequent than before)
+            if (Math.random() < dt * 8) {
                 this._playExhaustPop();
             }
         } else {
