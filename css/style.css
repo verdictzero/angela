@@ -489,6 +489,12 @@ body {
     gap: 8px;
 }
 
+#touch-lights {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
 /* Shared touch button base */
 .touch-btn {
     width: 90px;
