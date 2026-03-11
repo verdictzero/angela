@@ -489,6 +489,12 @@ body {
     gap: 8px;
 }
 
+#touch-lights {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
 /* Shared touch button base */
 .touch-btn {
     width: 90px;
@@ -555,6 +561,46 @@ body {
 }
 .touch-btn-cyan:active, .touch-btn-cyan.pressed {
     background: rgba(0, 150, 150, 0.7);
+}
+
+.touch-btn-lamp {
+    background: rgba(0, 150, 0, 0.4);
+    color: #0f0;
+    border: 2px solid rgba(0, 255, 0, 0.3);
+}
+.touch-btn-lamp.pressed {
+    background: rgba(0, 150, 0, 0.7);
+}
+.touch-btn-lamp.active {
+    background: rgba(0, 180, 0, 0.6);
+    color: #0f0;
+    border-color: rgba(0, 255, 0, 0.6);
+    box-shadow: 0 0 8px rgba(0, 255, 0, 0.3);
+}
+.touch-btn-lamp.inactive {
+    background: rgba(60, 60, 60, 0.4);
+    color: #666;
+    border-color: rgba(100, 100, 100, 0.3);
+}
+
+.touch-btn-hibeam {
+    background: rgba(0, 100, 180, 0.4);
+    color: #0cf;
+    border: 2px solid rgba(0, 200, 255, 0.3);
+}
+.touch-btn-hibeam.pressed {
+    background: rgba(0, 100, 180, 0.7);
+}
+.touch-btn-hibeam.active {
+    background: rgba(0, 140, 200, 0.6);
+    color: #0ef;
+    border-color: rgba(0, 220, 255, 0.6);
+    box-shadow: 0 0 8px rgba(0, 200, 255, 0.3);
+}
+.touch-btn-hibeam.inactive {
+    background: rgba(60, 60, 60, 0.4);
+    color: #666;
+    border-color: rgba(100, 100, 100, 0.3);
 }
 
 /* Responsive adjustments */
