@@ -195,20 +195,22 @@ export class RoadManager {
 
                 // ── Hairpin Turn Logic ──
                 let curvatureClampMax = 0.04;
+                let smoothRate = 0.08;
                 if (this._hairpinPhase === 'none') {
                     this._hairpinCooldown--;
                     if (this._hairpinCooldown <= 0) {
                         // Start a hairpin: lead-in phase first
                         this._hairpinDirection = Math.random() < 0.5 ? 1 : -1;
                         this._hairpinPhase = 'leadin';
-                        this._hairpinPhaseRemaining = 10;
+                        this._hairpinPhaseRemaining = 20;
                     }
                 }
 
                 if (this._hairpinPhase === 'leadin') {
-                    // Straighten out before the turn
-                    this.targetCurvature *= 0.8;
-                    curvatureClampMax = 0.02;
+                    // Straighten out fully before the turn
+                    this.targetCurvature = 0;
+                    curvatureClampMax = 0.01;
+                    smoothRate = 0.15;
                     this._hairpinPhaseRemaining--;
                     if (this._hairpinPhaseRemaining <= 0) {
                         this._hairpinPhase = 'turn';
@@ -221,12 +223,13 @@ export class RoadManager {
                     this._hairpinPhaseRemaining--;
                     if (this._hairpinPhaseRemaining <= 0) {
                         this._hairpinPhase = 'mid';
-                        this._hairpinPhaseRemaining = 8;
+                        this._hairpinPhaseRemaining = 25;
                     }
                 } else if (this._hairpinPhase === 'mid') {
-                    // Brief straightening between the two S-turn halves
-                    this.targetCurvature *= 0.6;
-                    curvatureClampMax = 0.06;
+                    // Straightaway between the two S-turn halves
+                    this.targetCurvature = 0;
+                    curvatureClampMax = 0.01;
+                    smoothRate = 0.20;
                     this._hairpinPhaseRemaining--;
                     if (this._hairpinPhaseRemaining <= 0) {
                         this._hairpinDirection *= -1; // reverse for second turn
@@ -240,12 +243,13 @@ export class RoadManager {
                     this._hairpinPhaseRemaining--;
                     if (this._hairpinPhaseRemaining <= 0) {
                         this._hairpinPhase = 'leadout';
-                        this._hairpinPhaseRemaining = 10;
+                        this._hairpinPhaseRemaining = 20;
                     }
                 } else if (this._hairpinPhase === 'leadout') {
-                    // Gradually return to normal
-                    this.targetCurvature *= 0.7;
-                    curvatureClampMax = 0.08;
+                    // Straighten out fully after the turns
+                    this.targetCurvature = 0;
+                    curvatureClampMax = 0.01;
+                    smoothRate = 0.15;
                     this._hairpinPhaseRemaining--;
                     if (this._hairpinPhaseRemaining <= 0) {
                         this._hairpinPhase = 'none';
@@ -258,7 +262,7 @@ export class RoadManager {
 
                 // Clamp curvature
                 this.targetCurvature = clamp(this.targetCurvature, -curvatureClampMax, curvatureClampMax);
-                this.currentCurvature += (this.targetCurvature - this.currentCurvature) * 0.08;
+                this.currentCurvature += (this.targetCurvature - this.currentCurvature) * smoothRate;
                 this.currentAngle += this.currentCurvature;
                 pos = new THREE.Vector3(
                     last.x + Math.sin(this.currentAngle) * POINT_SPACING,
