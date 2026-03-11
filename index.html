@@ -44,8 +44,13 @@
 <body>
     <!-- Loading Screen (visible immediately, fades out once first frame renders) -->
     <div id="loading-screen">
-        <div id="loading-text">LOADING</div>
-        <div id="loading-status"></div>
+        <div id="loading-box">
+            <div id="loading-text">LOADING</div>
+            <div id="loading-bar-track">
+                <div id="loading-bar-fill"></div>
+            </div>
+            <div id="loading-status"></div>
+        </div>
     </div>
 
     <!-- Updating UI Overlay (shown during resize/rotation) -->
