@@ -52,6 +52,7 @@ export class HUD {
         this._shiftLightEl = document.getElementById('shift-light');
         this._shiftArrowUp = document.getElementById('shift-arrow-up');
         this._shiftArrowDown = document.getElementById('shift-arrow-down');
+        this._lightsEl = document.getElementById('hud-lights');
 
         this._fuel = 100; // percent
         this._refuelTimer = 0;
@@ -206,6 +207,24 @@ export class HUD {
                 : '+00000';
             if (active) this._hitTimer -= dt;
             this._hitEl.classList.toggle('dim', !active);
+        }
+
+        // Lights indicator
+        if (this._lightsEl) {
+            const headlightsOn = vehicle && vehicle._cockpitHeadlightsOn !== undefined
+                ? vehicle._cockpitHeadlightsOn : true;
+            const highBeamsOn = vehicle && vehicle._cockpitHighBeamsOn !== undefined
+                ? vehicle._cockpitHighBeamsOn : false;
+            if (!headlightsOn) {
+                this._lightsEl.textContent = 'LAMPS: OFF';
+                this._lightsEl.style.color = '#555';
+            } else if (highBeamsOn) {
+                this._lightsEl.textContent = 'LAMPS: HI';
+                this._lightsEl.style.color = '#55ccff';
+            } else {
+                this._lightsEl.textContent = 'LAMPS: ON';
+                this._lightsEl.style.color = '';
+            }
         }
 
         // Combo timer

@@ -357,6 +357,7 @@ export class Cockpit {
     // ── Headlights ───────────────────────────────────────────
 
     _buildHeadlights() {
+        // Standard headlights
         this._headlightL = new THREE.SpotLight(0xffffcc, 30, 120, Math.PI / 6, 0.5, 1);
         this._headlightL.position.set(-0.6, -0.2, -1.8);
         this._headlightL.target.position.set(-0.6, -1, -20);
@@ -368,11 +369,57 @@ export class Cockpit {
         this._headlightR.target.position.set(0.6, -1, -20);
         this.group.add(this._headlightR);
         this.group.add(this._headlightR.target);
+
+        // High beams — brighter, longer range, tighter cone, cooler white
+        this._highBeamL = new THREE.SpotLight(0xeeeeff, 0, 250, Math.PI / 8, 0.3, 1);
+        this._highBeamL.position.set(-0.6, -0.2, -1.8);
+        this._highBeamL.target.position.set(-0.6, -0.5, -40);
+        this.group.add(this._highBeamL);
+        this.group.add(this._highBeamL.target);
+
+        this._highBeamR = new THREE.SpotLight(0xeeeeff, 0, 250, Math.PI / 8, 0.3, 1);
+        this._highBeamR.position.set(0.6, -0.2, -1.8);
+        this._highBeamR.target.position.set(0.6, -0.5, -40);
+        this.group.add(this._highBeamR);
+        this.group.add(this._highBeamR.target);
+
+        // Lighting state
+        this.headlightsOn = true;
+        this.highBeamsOn = false;
+        this._dayNightIntensity = 30;
     }
 
     setHeadlightIntensity(intensity) {
-        this._headlightL.intensity = intensity;
-        this._headlightR.intensity = intensity;
+        this._dayNightIntensity = intensity;
+        this._applyLightingState();
+    }
+
+    setHeadlightsOn(on) {
+        this.headlightsOn = on;
+        this._applyLightingState();
+    }
+
+    setHighBeams(on) {
+        this.highBeamsOn = on;
+        this._applyLightingState();
+    }
+
+    _applyLightingState() {
+        if (this.headlightsOn) {
+            this._headlightL.intensity = this._dayNightIntensity;
+            this._headlightR.intensity = this._dayNightIntensity;
+        } else {
+            this._headlightL.intensity = 0;
+            this._headlightR.intensity = 0;
+        }
+
+        if (this.highBeamsOn && this.headlightsOn) {
+            this._highBeamL.intensity = this._dayNightIntensity * 1.8;
+            this._highBeamR.intensity = this._dayNightIntensity * 1.8;
+        } else {
+            this._highBeamL.intensity = 0;
+            this._highBeamR.intensity = 0;
+        }
     }
 
     // ── Blood Splatter (raster image stamps) ───────────────────

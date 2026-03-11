@@ -24,10 +24,10 @@ const CG_HEIGHT = 0.52;             // m center of gravity height
 const GRAVITY = 9.81;
 
 // ── Engine / Drivetrain (AWD) ──────────────────────────────────
-const MAX_ENGINE_FORCE = 3200;      // N peak total (split across axles) — scaled to match visual scene
-const BOOST_ENGINE_MULT = 1.275;    // reduced boost (half the bonus)
-const MAX_SPEED = 50;               // m/s (~180 km/h) soft limit — matches visual object speed
-const BOOST_MAX_SPEED = 70;
+const MAX_ENGINE_FORCE = 4800;      // N peak total (split across axles) — high-performance engine
+const BOOST_ENGINE_MULT = 1.5;      // stronger boost multiplier
+const MAX_SPEED = 62;               // m/s (~223 km/h) soft limit — upgraded top speed
+const BOOST_MAX_SPEED = 85;
 const REVERSE_FORCE_FRAC = 0.30;   // reverse is 30 % of forward power
 const AWD_FRONT_SPLIT = 0.40;      // 40% front / 60% rear torque split
 const AWD_REAR_SPLIT = 0.60;
