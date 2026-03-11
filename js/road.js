@@ -45,12 +45,16 @@ export class RoadManager {
         this._nextChunkId = 0;
         this._lastRemovedChunks = [];
 
-        // Hairpin turn state
-        this._hairpinCooldown = 200;  // points until next hairpin (~800m)
-        this._hairpinRemaining = 0;   // points remaining in current hairpin
-        this._hairpinDirection = 1;   // +1 or -1
-        this._hairpinPhase = 'none';  // 'none', 'leadin', 'turn', 'mid', 'turn2', 'leadout'
-        this._hairpinPhaseRemaining = 0;
+        // Turn pattern state machine
+        this._turnCooldown = 120;     // points until next pattern (~480m)
+        this._turnDirection = 1;      // +1 or -1
+        this._turnPhase = 'none';
+        this._turnPhaseRemaining = 0;
+        this._turnPattern = 'none';   // 'gradual-s', 'sharp-right', 'whiplash', 'chicane'
+
+        // Spatial grid for self-intersection detection
+        this._spatialGrid = new Map();  // "gx,gz" -> [pointIndices]
+        this._gridCellSize = 30;        // 30m cells
 
         // Generate textures
         this._textures = this._generateTextures();
@@ -184,6 +188,62 @@ export class RoadManager {
 
     // ── Road Point Generation ──────────────────────────────────
 
+    // ── Spatial grid for self-intersection detection ──────────
+
+    _gridKey(x, z) {
+        const gx = Math.floor(x / this._gridCellSize);
+        const gz = Math.floor(z / this._gridCellSize);
+        return `${gx},${gz}`;
+    }
+
+    _registerPoint(idx, pos) {
+        const key = this._gridKey(pos.x, pos.z);
+        if (!this._spatialGrid.has(key)) this._spatialGrid.set(key, []);
+        this._spatialGrid.get(key).push(idx);
+    }
+
+    /**
+     * Check if a candidate position is too close to existing road points.
+     * Skips the most recent `skipRecent` points (so the road doesn't
+     * collide with itself at the current tip).
+     * Returns true if intersection detected.
+     */
+    _wouldSelfIntersect(pos, skipRecent = 80) {
+        const minDist = ROAD_HALF_WIDTH * 2 + SHOULDER_WIDTH * 2 + 4; // ~27m clearance
+        const minDistSq = minDist * minDist;
+        const latestSafe = this.points.length - skipRecent;
+        const gx = Math.floor(pos.x / this._gridCellSize);
+        const gz = Math.floor(pos.z / this._gridCellSize);
+
+        // Check 3x3 neighborhood of grid cells
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dz = -1; dz <= 1; dz++) {
+                const key = `${gx + dx},${gz + dz}`;
+                const cell = this._spatialGrid.get(key);
+                if (!cell) continue;
+                for (let k = 0; k < cell.length; k++) {
+                    const idx = cell[k];
+                    if (idx >= latestSafe) continue; // skip recent points
+                    const other = this.points[idx].position;
+                    const ddx = pos.x - other.x;
+                    const ddz = pos.z - other.z;
+                    if (ddx * ddx + ddz * ddz < minDistSq) return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // ── Turn pattern selection ──────────────────────────────────
+
+    _pickTurnPattern() {
+        const r = Math.random();
+        if (r < 0.30) return 'gradual-s';    // gradual S-curve hairpin
+        if (r < 0.55) return 'sharp-right';   // sudden sharp right
+        if (r < 0.80) return 'whiplash';       // light left, hard right
+        return 'chicane';                       // hard left, hard right rapid combo
+    }
+
     _generatePoints(count) {
         for (let i = 0; i < count; i++) {
             const ptIndex = this.points.length;
@@ -193,82 +253,114 @@ export class RoadManager {
             } else {
                 const last = this.points[ptIndex - 1].position;
 
-                // ── Hairpin Turn Logic ──
+                // ── Turn Pattern State Machine ──
                 let curvatureClampMax = 0.04;
                 let smoothRate = 0.08;
-                if (this._hairpinPhase === 'none') {
-                    this._hairpinCooldown--;
-                    if (this._hairpinCooldown <= 0) {
-                        // Start a hairpin: lead-in phase first
-                        this._hairpinDirection = Math.random() < 0.5 ? 1 : -1;
-                        this._hairpinPhase = 'leadin';
-                        this._hairpinPhaseRemaining = 20;
+
+                if (this._turnPhase === 'none') {
+                    this._turnCooldown--;
+                    if (this._turnCooldown <= 0) {
+                        this._turnPattern = this._pickTurnPattern();
+                        this._turnDirection = Math.random() < 0.5 ? 1 : -1;
+                        this._turnPhase = 'leadin';
+                        this._turnPhaseRemaining = 15;
                     }
                 }
 
-                if (this._hairpinPhase === 'leadin') {
-                    // Straighten out fully before the turn
+                if (this._turnPhase === 'leadin') {
+                    // Straighten before the pattern
                     this.targetCurvature = 0;
                     curvatureClampMax = 0.01;
-                    smoothRate = 0.15;
-                    this._hairpinPhaseRemaining--;
-                    if (this._hairpinPhaseRemaining <= 0) {
-                        this._hairpinPhase = 'turn';
-                        this._hairpinPhaseRemaining = 25 + Math.floor(Math.random() * 10);
+                    smoothRate = 0.12;
+                    this._turnPhaseRemaining--;
+                    if (this._turnPhaseRemaining <= 0) {
+                        this._turnPhase = 'exec';
+                        this._turnExecStep = 0;
+                        this._turnPhaseRemaining = this._getPatternDuration();
                     }
-                } else if (this._hairpinPhase === 'turn') {
-                    // Force high curvature in one direction
-                    this.targetCurvature = this._hairpinDirection * (0.12 + Math.random() * 0.03);
-                    curvatureClampMax = 0.15;
-                    this._hairpinPhaseRemaining--;
-                    if (this._hairpinPhaseRemaining <= 0) {
-                        this._hairpinPhase = 'mid';
-                        this._hairpinPhaseRemaining = 25;
+                } else if (this._turnPhase === 'exec') {
+                    const result = this._execTurnPattern(curvatureClampMax, smoothRate);
+                    curvatureClampMax = result.clamp;
+                    smoothRate = result.smooth;
+                    this._turnPhaseRemaining--;
+                    if (this._turnPhaseRemaining <= 0) {
+                        this._turnPhase = 'leadout';
+                        this._turnPhaseRemaining = 15;
                     }
-                } else if (this._hairpinPhase === 'mid') {
-                    // Straightaway between the two S-turn halves
+                } else if (this._turnPhase === 'leadout') {
                     this.targetCurvature = 0;
                     curvatureClampMax = 0.01;
-                    smoothRate = 0.20;
-                    this._hairpinPhaseRemaining--;
-                    if (this._hairpinPhaseRemaining <= 0) {
-                        this._hairpinDirection *= -1; // reverse for second turn
-                        this._hairpinPhase = 'turn2';
-                        this._hairpinPhaseRemaining = 25 + Math.floor(Math.random() * 10);
-                    }
-                } else if (this._hairpinPhase === 'turn2') {
-                    // Second hairpin in the opposite direction
-                    this.targetCurvature = this._hairpinDirection * (0.12 + Math.random() * 0.03);
-                    curvatureClampMax = 0.15;
-                    this._hairpinPhaseRemaining--;
-                    if (this._hairpinPhaseRemaining <= 0) {
-                        this._hairpinPhase = 'leadout';
-                        this._hairpinPhaseRemaining = 20;
-                    }
-                } else if (this._hairpinPhase === 'leadout') {
-                    // Straighten out fully after the turns
-                    this.targetCurvature = 0;
-                    curvatureClampMax = 0.01;
-                    smoothRate = 0.15;
-                    this._hairpinPhaseRemaining--;
-                    if (this._hairpinPhaseRemaining <= 0) {
-                        this._hairpinPhase = 'none';
-                        this._hairpinCooldown = 150 + Math.floor(Math.random() * 150);
+                    smoothRate = 0.12;
+                    this._turnPhaseRemaining--;
+                    if (this._turnPhaseRemaining <= 0) {
+                        this._turnPhase = 'none';
+                        this._turnCooldown = 80 + Math.floor(Math.random() * 120);
                     }
                 } else {
-                    // Normal curvature
-                    this.targetCurvature += (Math.random() - 0.5) * 0.06;
+                    // Normal gentle curves
+                    this.targetCurvature += (Math.random() - 0.5) * 0.05;
                 }
 
-                // Clamp curvature
+                // Clamp and smooth curvature
                 this.targetCurvature = clamp(this.targetCurvature, -curvatureClampMax, curvatureClampMax);
                 this.currentCurvature += (this.targetCurvature - this.currentCurvature) * smoothRate;
+
+                // ── Self-intersection avoidance ──
+                // Try the desired angle; if it intersects, nudge away
+                const savedAngle = this.currentAngle;
+                const savedCurvature = this.currentCurvature;
                 this.currentAngle += this.currentCurvature;
-                pos = new THREE.Vector3(
+
+                let candidatePos = new THREE.Vector3(
                     last.x + Math.sin(this.currentAngle) * POINT_SPACING,
                     0,
                     last.z - Math.cos(this.currentAngle) * POINT_SPACING
                 );
+
+                if (this._wouldSelfIntersect(candidatePos)) {
+                    // Try steering away: test several correction angles
+                    let resolved = false;
+                    for (let attempt = 1; attempt <= 8; attempt++) {
+                        // Alternate left/right corrections of increasing magnitude
+                        const sign = (attempt % 2 === 0) ? 1 : -1;
+                        const nudge = sign * attempt * 0.03;
+                        this.currentAngle = savedAngle + savedCurvature + nudge;
+                        candidatePos = new THREE.Vector3(
+                            last.x + Math.sin(this.currentAngle) * POINT_SPACING,
+                            0,
+                            last.z - Math.cos(this.currentAngle) * POINT_SPACING
+                        );
+                        if (!this._wouldSelfIntersect(candidatePos)) {
+                            // Accept this corrected angle and reset curvature toward straight
+                            this.currentCurvature = nudge * 0.5;
+                            this.targetCurvature = 0;
+                            // Abort any active turn pattern to prevent further intersection
+                            if (this._turnPhase === 'exec') {
+                                this._turnPhase = 'leadout';
+                                this._turnPhaseRemaining = 15;
+                            }
+                            resolved = true;
+                            break;
+                        }
+                    }
+                    if (!resolved) {
+                        // Last resort: hard steer to go straight ahead
+                        this.currentAngle = savedAngle;
+                        this.currentCurvature = 0;
+                        this.targetCurvature = 0;
+                        candidatePos = new THREE.Vector3(
+                            last.x + Math.sin(this.currentAngle) * POINT_SPACING,
+                            0,
+                            last.z - Math.cos(this.currentAngle) * POINT_SPACING
+                        );
+                        if (this._turnPhase === 'exec') {
+                            this._turnPhase = 'leadout';
+                            this._turnPhaseRemaining = 15;
+                        }
+                    }
+                }
+
+                pos = candidatePos;
             }
             const forward = new THREE.Vector3(
                 Math.sin(this.currentAngle), 0, -Math.cos(this.currentAngle)
@@ -276,9 +368,89 @@ export class RoadManager {
             const right = new THREE.Vector3(
                 Math.cos(this.currentAngle), 0, Math.sin(this.currentAngle)
             ).normalize();
-            this.points.push({ position: pos.clone(), forward: forward.clone(), right: right.clone() });
+            const newPt = { position: pos.clone(), forward: forward.clone(), right: right.clone() };
+            this.points.push(newPt);
+            this._registerPoint(ptIndex, pos);
             this.totalDistance += POINT_SPACING;
         }
+    }
+
+    // ── Turn pattern durations ──────────────────────────────────
+
+    _getPatternDuration() {
+        switch (this._turnPattern) {
+            case 'gradual-s':   return 120;  // ~480m total S-curve
+            case 'sharp-right': return 18;   // ~72m quick snap
+            case 'whiplash':    return 40;   // ~160m light-then-hard
+            case 'chicane':     return 50;   // ~200m left-right-left
+            default:            return 30;
+        }
+    }
+
+    // ── Execute active turn pattern for one step ────────────────
+
+    _execTurnPattern(defaultClamp, defaultSmooth) {
+        const total = this._getPatternDuration();
+        const elapsed = total - this._turnPhaseRemaining;
+        const t = elapsed / total; // 0→1 progress
+        let clamp_ = defaultClamp;
+        let smooth = defaultSmooth;
+
+        switch (this._turnPattern) {
+            case 'gradual-s': {
+                // Gradual S-curve: smooth sinusoidal curvature, moderate intensity
+                // First half curves one way, second half curves the other
+                const curveMag = 0.05 + Math.random() * 0.005;
+                this.targetCurvature = this._turnDirection * curveMag * Math.sin(t * Math.PI * 2);
+                clamp_ = 0.06;
+                smooth = 0.06;
+                break;
+            }
+            case 'sharp-right': {
+                // Sudden sharp right turn (always right = -1 direction for surprise)
+                this.targetCurvature = -0.07 - Math.random() * 0.01;
+                clamp_ = 0.09;
+                smooth = 0.20;
+                break;
+            }
+            case 'whiplash': {
+                // Light drift left, then HARD snap right
+                if (t < 0.45) {
+                    // Gentle left
+                    this.targetCurvature = this._turnDirection * 0.025;
+                    clamp_ = 0.04;
+                    smooth = 0.08;
+                } else {
+                    // Hard opposite direction
+                    this.targetCurvature = -this._turnDirection * (0.07 + Math.random() * 0.01);
+                    clamp_ = 0.09;
+                    smooth = 0.18;
+                }
+                break;
+            }
+            case 'chicane': {
+                // Rapid left-right-left sequence
+                const phase3 = t * 3;
+                if (phase3 < 1) {
+                    // Hard left
+                    this.targetCurvature = this._turnDirection * 0.06;
+                    clamp_ = 0.08;
+                    smooth = 0.15;
+                } else if (phase3 < 2) {
+                    // Hard right
+                    this.targetCurvature = -this._turnDirection * 0.07;
+                    clamp_ = 0.09;
+                    smooth = 0.18;
+                } else {
+                    // Mild left recovery
+                    this.targetCurvature = this._turnDirection * 0.03;
+                    clamp_ = 0.05;
+                    smooth = 0.10;
+                }
+                break;
+            }
+        }
+        return { clamp: clamp_, smooth };
     }
 
     // ── Chunk Building ─────────────────────────────────────────
