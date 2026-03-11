@@ -170,6 +170,8 @@ export class InputManager {
         const btnShiftUp = document.getElementById('btn-shift-up');
         const btnShiftDown = document.getElementById('btn-shift-down');
         const btnTransMode = document.getElementById('btn-trans-mode');
+        const btnHeadlights = document.getElementById('btn-headlights');
+        const btnHighBeams = document.getElementById('btn-highbeams');
 
         if (joystickBase) {
             joystickBase.addEventListener('touchstart', (e) => {
@@ -246,6 +248,32 @@ export class InputManager {
         edgeButton(btnShiftUp, '_touchShiftUp');
         edgeButton(btnShiftDown, '_touchShiftDown');
         edgeButton(btnTransMode, '_touchTransToggle');
+
+        // Toggle buttons for lights
+        const toggleButton = (el, prop) => {
+            if (!el) return;
+            el.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                this[prop] = !this[prop];
+                el.classList.add('pressed');
+                el.classList.toggle('active', this[prop]);
+                el.classList.toggle('inactive', !this[prop]);
+            });
+            const end = () => { el.classList.remove('pressed'); };
+            el.addEventListener('touchend', end);
+            el.addEventListener('touchcancel', end);
+        };
+
+        toggleButton(btnHeadlights, 'headlights');
+        toggleButton(btnHighBeams, 'highBeams');
+
+        // Set initial visual state
+        if (btnHeadlights) {
+            btnHeadlights.classList.add('active');
+        }
+        if (btnHighBeams) {
+            btnHighBeams.classList.add('inactive');
+        }
     }
 
     /**
