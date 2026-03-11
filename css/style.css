@@ -148,17 +148,16 @@ body {
 }
 
 #start-screen h1 {
-    font-size: 6rem;
-    color: #cc0000;
-    text-shadow: 0 0 20px #ff0000, 0 0 40px #880000;
-    letter-spacing: 0.3em;
-    margin-bottom: 0.2em;
-}
-
-#start-screen p {
-    font-size: 1.5rem;
-    color: #888;
-    margin-bottom: 2em;
+    font-family: 'Arial Narrow', 'Liberation Sans Narrow', 'Nimbus Sans Narrow', sans-serif;
+    font-style: italic;
+    font-size: 5rem;
+    color: #fff;
+    -webkit-text-stroke: 2px #000;
+    paint-order: stroke fill;
+    text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.7);
+    letter-spacing: 0.05em;
+    margin-bottom: 0.5em;
+    text-transform: none;
 }
 
 #start-prompt {
