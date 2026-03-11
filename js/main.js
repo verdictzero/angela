@@ -142,6 +142,38 @@ window.addEventListener('keydown', (e) => {
     }
 });
 
+// ── Sound Toggle ──────────────────────────────────────────────
+
+const soundToggleBtn = document.getElementById('sound-toggle');
+
+function toggleSound() {
+    const muted = !audio.isMuted();
+    audio.setMuted(muted);
+    if (soundToggleBtn) {
+        soundToggleBtn.textContent = muted ? 'SND OFF' : 'SND ON';
+        soundToggleBtn.className = muted ? 'sound-off' : 'sound-on';
+    }
+}
+
+if (soundToggleBtn) {
+    soundToggleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleSound();
+    });
+    soundToggleBtn.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleSound();
+    });
+}
+
+// M key toggles sound
+window.addEventListener('keydown', (e) => {
+    if (e.code === 'KeyM' && gameStarted) {
+        toggleSound();
+    }
+});
+
 // ── Start Screen ──────────────────────────────────────────────
 
 let gameStarted = false;
