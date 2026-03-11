@@ -16,7 +16,7 @@ import { Vehicle } from './vehicle.js';
 import { Cockpit, DRIVER_OFFSET_X } from './cockpit.js';
 import { KillableNPCManager } from './killable_npcs.js';
 import { GoreSystem } from './gore.js';
-import { HUD } from './hud.js';
+import { HUD, getGearAndRPM } from './hud.js';
 import { DayNightCycle } from './daynight.js';
 
 import { FoliageManager } from './foliage.js';
@@ -183,9 +183,14 @@ function startGame() {
     if (gameStarted) return;
     gameStarted = true;
 
-    // Initialize audio on first user gesture
+    // Initialize audio on first user gesture — start muted by default
     audio.init();
     audio.resume();
+    audio.setMuted(true);
+    if (soundToggleBtn) {
+        soundToggleBtn.textContent = 'SND OFF';
+        soundToggleBtn.className = 'sound-off';
+    }
 
     // Fade out start screen instead of instant hide
     if (startScreen) {
@@ -311,6 +316,20 @@ function gameLoop() {
 
     // Update vehicle physics
     vehicle.update(dt, input, roadInfo);
+
+    // Redline health degradation
+    {
+        const overrideGear = vehicle.manualMode ? vehicle.currentGear : undefined;
+        const { rpm } = getGearAndRPM(Math.abs(vehicle.speed), overrideGear);
+        if (vehicle.engineRunning && rpm >= 7000) {
+            vehicle._redlineTimer += dt;
+            if (vehicle._redlineTimer > vehicle._redlineGracePeriod) {
+                vehicle.health = Math.max(0, vehicle.health - vehicle._redlineDamageRate * dt);
+            }
+        } else {
+            vehicle._redlineTimer = Math.max(0, vehicle._redlineTimer - dt * 2);
+        }
+    }
 
     // Update road (generate ahead, remove behind)
     road.update(vehicle.position);

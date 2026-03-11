@@ -127,6 +127,11 @@ export class Vehicle {
         this.engineRunning = true;
         this.engineStalled = false;
         this._wasMoving = false;
+
+        // Redline damage tracking
+        this._redlineTimer = 0;
+        this._redlineGracePeriod = 3.0; // seconds before damage starts
+        this._redlineDamageRate = 2.0;  // HP/sec while over grace period
     }
 
     // ── Transmission helpers (unchanged API) ───────────────────
@@ -181,6 +186,11 @@ export class Vehicle {
         const idx = this.currentGear - 1;
         const lo = GEAR_SHIFTS[idx];
         const hi = idx + 1 < GEAR_SHIFTS.length ? GEAR_SHIFTS[idx + 1] : MAX_SPEED;
+        // Stall if lugging — speed way below gear range while moving
+        if (s > 1.5 && s < lo * 0.35 && this.currentGear > 2) {
+            this.stallEngine();
+            return 0;
+        }
         if (s < lo * 0.5) return 0.3;
         if (s > hi * 1.3) return 0.5;
         return 1.0;

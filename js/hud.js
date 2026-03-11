@@ -50,6 +50,8 @@ export class HUD {
         this._multEl = document.getElementById('hud-mult');
         this._hitEl = document.getElementById('hud-hit');
         this._shiftLightEl = document.getElementById('shift-light');
+        this._shiftArrowUp = document.getElementById('shift-arrow-up');
+        this._shiftArrowDown = document.getElementById('shift-arrow-down');
 
         this._fuel = 100; // percent
         this._refuelTimer = 0;
@@ -133,6 +135,23 @@ export class HUD {
             if (this._shiftLightEl) {
                 const shiftLightOn = vehicle && vehicle.engineRunning && rpm > 6200;
                 this._shiftLightEl.className = shiftLightOn ? 'shift-light-on' : 'shift-light-off';
+            }
+
+            // Shift arrows — suggest shift up (high RPM) or shift down (low RPM)
+            if (vehicle && vehicle.engineRunning) {
+                const showUp = rpm > 6200 && gear < 7;
+                const showDown = rpm < 2000 && gear > 1 && Math.abs(speedMs) > 2;
+                if (this._shiftArrowUp) {
+                    this._shiftArrowUp.textContent = showUp ? '\u25B2' : '\u25B2';
+                    this._shiftArrowUp.className = showUp ? 'shift-arrow shift-arrow-on' : 'shift-arrow shift-arrow-off';
+                }
+                if (this._shiftArrowDown) {
+                    this._shiftArrowDown.textContent = showDown ? '\u25BC' : '\u25BC';
+                    this._shiftArrowDown.className = showDown ? 'shift-arrow shift-arrow-on' : 'shift-arrow shift-arrow-off';
+                }
+            } else {
+                if (this._shiftArrowUp) this._shiftArrowUp.className = 'shift-arrow shift-arrow-off';
+                if (this._shiftArrowDown) this._shiftArrowDown.className = 'shift-arrow shift-arrow-off';
             }
         }
 
