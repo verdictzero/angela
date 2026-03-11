@@ -276,11 +276,18 @@ function gameLoop() {
     unlitUniforms.fogStart.value = fog.near;
     unlitUniforms.fogEnd.value = fog.far;
 
-    // Headlights follow day/night
+    // Headlights follow day/night + input toggles
+    cockpit.setHeadlightsOn(input.headlights);
+    cockpit.setHighBeams(input.highBeams);
     cockpit.setHeadlightIntensity(intensity.headlight);
 
-    // Headlight uniforms for unlit shader (updated after updateCamera sets camera.position)
-    unlitUniforms.headlightIntensity.value = intensity.headlight / 50.0;
+    // Pass lighting state to vehicle for HUD display
+    vehicle._cockpitHeadlightsOn = input.headlights;
+    vehicle._cockpitHighBeamsOn = input.highBeams;
+
+    // Headlight uniforms for unlit shader — zero if headlights off
+    const effectiveHeadlight = input.headlights ? intensity.headlight : 0;
+    unlitUniforms.headlightIntensity.value = effectiveHeadlight / 50.0;
 
     // Tone mapping exposure shifts slightly with time of day
     renderer.toneMappingExposure = dayNight.isNight ? 0.8 : 1.1;

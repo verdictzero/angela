@@ -18,6 +18,8 @@ export class InputManager {
         this.wipers = false;   // toggle on F
         this.washer = false;   // held on R
         this.clutch = false;   // held on C / left ctrl
+        this.headlights = true;  // toggle on H (default on)
+        this.highBeams = false;  // toggle on J (default off)
 
         // Edge-triggered shift events (consumed per frame)
         this.shiftUp = false;
@@ -26,6 +28,8 @@ export class InputManager {
 
         // Wiper toggle tracking
         this._wipersToggle = false;
+        this._headlightsToggle = false;
+        this._highBeamsToggle = false;
 
         // Shift edge tracking
         this._shiftUpEdge = false;
@@ -81,6 +85,16 @@ export class InputManager {
                 this._wipersToggle = true;
                 this.wipers = !this.wipers;
             }
+            // Headlight toggle on H keydown edge
+            if (e.code === 'KeyH' && !this._headlightsToggle) {
+                this._headlightsToggle = true;
+                this.headlights = !this.headlights;
+            }
+            // High beam toggle on J keydown edge
+            if (e.code === 'KeyJ' && !this._highBeamsToggle) {
+                this._highBeamsToggle = true;
+                this.highBeams = !this.highBeams;
+            }
             // Shift up edge (E)
             if (e.code === 'KeyE' && !this._shiftUpEdge) {
                 this._shiftUpEdge = true;
@@ -99,13 +113,15 @@ export class InputManager {
             // Prevent default for game keys
             if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space',
                  'ShiftLeft', 'ShiftRight', 'KeyF', 'KeyR', 'KeyC', 'KeyE',
-                 'KeyQ', 'KeyT', 'ControlLeft'].includes(e.code)) {
+                 'KeyQ', 'KeyT', 'KeyH', 'KeyJ', 'ControlLeft'].includes(e.code)) {
                 e.preventDefault();
             }
         });
         window.addEventListener('keyup', (e) => {
             this._keys[e.code] = false;
             if (e.code === 'KeyF') this._wipersToggle = false;
+            if (e.code === 'KeyH') this._headlightsToggle = false;
+            if (e.code === 'KeyJ') this._highBeamsToggle = false;
             if (e.code === 'KeyE') this._shiftUpEdge = false;
             if (e.code === 'KeyQ') this._shiftDownEdge = false;
             if (e.code === 'KeyT') this._transToggleEdge = false;
