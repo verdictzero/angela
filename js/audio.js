@@ -60,6 +60,13 @@ export class AudioEngine {
         this._mopedNodes = [];
         this._mopedPool = [];
 
+        // E-brake squeal
+        this._ebrakeNodes = null;
+        this._ebrakeGain = 0;
+
+        // Mute state
+        this._muted = false;
+
         // One-shot cooldowns
         this._lastImpactTime = 0;
         this._lastSplatTime = 0;
@@ -96,6 +103,7 @@ export class AudioEngine {
 
         this._buildEngine();
         this._buildTireScreech();
+        this._buildEbrakeSqueal();
         this._buildSurfaceRumble();
     }
 
@@ -106,6 +114,22 @@ export class AudioEngine {
         if (this._ctx && this._ctx.state === 'suspended') {
             this._ctx.resume();
         }
+    }
+
+    /**
+     * Mute or unmute all audio.
+     */
+    setMuted(muted) {
+        this._muted = muted;
+        if (this._masterGain) {
+            this._masterGain.gain.setTargetAtTime(
+                muted ? 0 : 0.7, this._ctx.currentTime, 0.02
+            );
+        }
+    }
+
+    isMuted() {
+        return this._muted;
     }
 
     // ── Engine Sound ────────────────────────────────────────
@@ -213,6 +237,52 @@ export class AudioEngine {
         this._screechNodes = { noise, filter: bp, gain: screechGain };
     }
 
+    _buildEbrakeSqueal() {
+        const ctx = this._ctx;
+
+        // High-pitched resonant squeal — layered filtered noise + sine overtone
+        const noise = this._createNoiseSource();
+
+        // Narrow bandpass at high frequency for piercing squeal character
+        const bp1 = ctx.createBiquadFilter();
+        bp1.type = 'bandpass';
+        bp1.frequency.value = 5500;
+        bp1.Q.value = 12;
+
+        // Second resonant peak for metallic shimmer
+        const bp2 = ctx.createBiquadFilter();
+        bp2.type = 'bandpass';
+        bp2.frequency.value = 7800;
+        bp2.Q.value = 8;
+
+        const noiseGain1 = ctx.createGain();
+        noiseGain1.gain.value = 0;
+        const noiseGain2 = ctx.createGain();
+        noiseGain2.gain.value = 0;
+
+        noise.connect(bp1);
+        noise.connect(bp2);
+        bp1.connect(noiseGain1);
+        bp2.connect(noiseGain2);
+        noiseGain1.connect(this._compressor);
+        noiseGain2.connect(this._compressor);
+
+        // Sine overtone — gives the squeal a tonal "singing" quality
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.value = 4200;
+        const oscGain = ctx.createGain();
+        oscGain.gain.value = 0;
+        osc.connect(oscGain);
+        oscGain.connect(this._compressor);
+        osc.start();
+
+        this._ebrakeNodes = {
+            noise, bp1, bp2, noiseGain1, noiseGain2,
+            osc, oscGain,
+        };
+    }
+
     _buildSurfaceRumble() {
         const ctx = this._ctx;
 
@@ -295,6 +365,9 @@ export class AudioEngine {
 
         // ── Tire Screech ─────────────────────────────────────
         this._updateTireScreech(dt, drifting, driftAngle, absSpeed, handbrake, brakeInput);
+
+        // ── E-Brake Squeal ───────────────────────────────────
+        this._updateEbrakeSqueal(dt, handbrake, brakeInput, absSpeed, drifting, driftAngle);
 
         // ── Surface Rumble ───────────────────────────────────
         this._updateSurfaceRumble(dt, surface, absSpeed);
@@ -416,6 +489,55 @@ export class AudioEngine {
         this._screechNodes.filter.frequency.setTargetAtTime(
             screechFreq, this._ctx.currentTime, 0.05
         );
+    }
+
+    _updateEbrakeSqueal(dt, handbrake, brakeInput, speed, drifting, driftAngle) {
+        if (!this._ebrakeNodes) return;
+
+        const now = this._ctx.currentTime;
+        let targetGain = 0;
+
+        // E-brake squeal: triggered by handbrake while moving, or heavy braking while sliding
+        if (handbrake && speed > 3) {
+            // Intensity ramps with speed — louder at higher speeds
+            targetGain = clamp(speed * 0.012, 0, 0.30);
+            // Extra intensity when also drifting (sideways slide = louder squeal)
+            if (drifting) {
+                targetGain += clamp(Math.abs(driftAngle) * 0.15, 0, 0.12);
+            }
+        }
+
+        // Hard braking at speed with drift (ABS-less lockup squeal)
+        if (brakeInput > 0.85 && speed > 12 && drifting) {
+            targetGain = Math.max(targetGain, 0.18);
+        }
+
+        targetGain = clamp(targetGain, 0, 0.35);
+
+        // Smooth approach to target
+        this._ebrakeGain = lerp(this._ebrakeGain, targetGain, 1 - Math.exp(-8 * dt));
+
+        // Apply gains to both noise bands and sine overtone
+        this._ebrakeNodes.noiseGain1.gain.setTargetAtTime(
+            this._ebrakeGain, now, 0.03
+        );
+        this._ebrakeNodes.noiseGain2.gain.setTargetAtTime(
+            this._ebrakeGain * 0.6, now, 0.03
+        );
+        this._ebrakeNodes.oscGain.gain.setTargetAtTime(
+            this._ebrakeGain * 0.15, now, 0.03
+        );
+
+        // Pitch modulation — squeal frequency shifts with speed and drift angle
+        const basePitch = 4500 + speed * 60;
+        const driftPitch = Math.abs(driftAngle) * 800;
+        const squeelFreq1 = basePitch + driftPitch;
+        const squeelFreq2 = basePitch * 1.42 + driftPitch * 0.7;
+        const oscFreq = basePitch * 0.78 + driftPitch * 0.5;
+
+        this._ebrakeNodes.bp1.frequency.setTargetAtTime(squeelFreq1, now, 0.05);
+        this._ebrakeNodes.bp2.frequency.setTargetAtTime(squeelFreq2, now, 0.05);
+        this._ebrakeNodes.osc.frequency.setTargetAtTime(oscFreq, now, 0.05);
     }
 
     _updateSurfaceRumble(dt, surface, speed) {
