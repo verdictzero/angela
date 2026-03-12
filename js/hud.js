@@ -255,18 +255,20 @@ export class HUD {
         }
         if (this._odoEl) {
             const miles = this._odometerMeters * 0.000621371;
-            this._odoEl.textContent = `ODO: ${String(Math.floor(miles)).padStart(6, '0')} mi`;
+            const whole = Math.floor(miles);
+            const tenths = Math.floor((miles - whole) * 10);
+            this._odoEl.textContent = `ODO: ${String(whole).padStart(5, '0')}.${tenths} mi`;
         }
 
         // Compass — heading from vehicle angle
-        if (this._compassEl && vehicle) {
+        if (this._compassEl && vehicle && vehicle.angle !== undefined) {
             // vehicle.angle is CW from -Z (north), convert to degrees 0-360
-            let deg = ((vehicle.angle * 180 / Math.PI) % 360 + 360) % 360;
-            deg = Math.round(deg);
+            const degRaw = ((vehicle.angle * 180 / Math.PI) % 360 + 360) % 360;
+            const deg = Math.floor(degRaw);
             const cardinals = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-            const idx = Math.round(deg / 45) % 8;
+            const idx = Math.round(degRaw / 45) % 8;
             const cardinal = cardinals[idx];
-            this._compassEl.textContent = `HDG: ${cardinal.padEnd(2)} ${String(deg).padStart(3, '0')}\u00B0`;
+            this._compassEl.textContent = `HDG: ${cardinal.padEnd(2)} ${String(deg % 360).padStart(3, '0')}\u00B0`;
         }
 
         // Combo timer
