@@ -320,6 +320,7 @@ body {
     right: 20px;
     z-index: 55;
     display: flex;
+    align-items: stretch;
     gap: 4px;
     pointer-events: none;
 }
@@ -331,17 +332,22 @@ body {
     border-radius: 4px;
     letter-spacing: 0.15em;
     transition: background 0.1s, color 0.1s, box-shadow 0.1s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .shift-arrow {
     font-family: '7seg', 'Courier New', monospace;
     font-size: clamp(0.7rem, 1.4vw, 1rem);
+    min-width: 2em;
     padding: 6px 8px;
     border-radius: 4px;
     transition: background 0.1s, color 0.1s, box-shadow 0.1s;
     display: flex;
     align-items: center;
     justify-content: center;
+    line-height: 1;
 }
 
 .shift-arrow-off {
