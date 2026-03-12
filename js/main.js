@@ -99,6 +99,15 @@ const audio = new AudioEngine();
 // Cockpit is child of camera, add camera to scene
 scene.add(camera);
 
+// Clutch button starts disabled (auto mode is default)
+{
+    const btnClutch = document.getElementById('btn-clutch');
+    if (btnClutch) {
+        btnClutch.disabled = true;
+        btnClutch.classList.add('touch-btn-disabled');
+    }
+}
+
 // ── NPC Spawning ─────────────────────────────────────────────
 
 let lastSpawnedChunkId = -1;
@@ -314,6 +323,11 @@ function gameLoop() {
         vehicle.toggleTransmission();
         const btn = document.getElementById('btn-trans-mode');
         if (btn) btn.textContent = vehicle.manualMode ? 'MAN' : 'AUTO';
+        const btnClutch = document.getElementById('btn-clutch');
+        if (btnClutch) {
+            btnClutch.disabled = !vehicle.manualMode;
+            btnClutch.classList.toggle('touch-btn-disabled', !vehicle.manualMode);
+        }
     }
     if (input.shiftUp) vehicle.shiftUp();
     if (input.shiftDown) vehicle.shiftDown();

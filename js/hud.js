@@ -132,6 +132,10 @@ export class HUD {
                 this._tachEl.classList.remove('tach-flash');
             }
 
+            // Amber tach in manual mode
+            const isManual = vehicle && vehicle.manualMode;
+            this._tachEl.classList.toggle('tach-manual', isManual);
+
             // Shift light — illuminate when RPM > 6200 and engine running
             if (this._shiftLightEl) {
                 const shiftLightOn = vehicle && vehicle.engineRunning && rpm > 6200;
