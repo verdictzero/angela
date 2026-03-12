@@ -13,6 +13,7 @@
 import * as THREE from 'three';
 import { createUnlitColorMaterial, createUnlitMaterial } from './shaders.js';
 import { randomRange, createCanvasTexture } from './utils.js';
+import { bustUrl } from './cacheBust.js';
 
 // ── Particles (small red squares) ────────────────────────────
 const MAX_PARTICLES = 1500;
@@ -84,7 +85,7 @@ export class GoreSystem {
 
         // Gore sprite sheet texture (4x4 grid, 256px cells)
         const goreSpriteSheet = new THREE.TextureLoader().load(
-            'assets/gore_sprite_ sheet_4x4_256pxCells.png'
+            bustUrl('assets/gore_sprite_ sheet_4x4_256pxCells.png')
         );
         goreSpriteSheet.magFilter = THREE.NearestFilter;
         goreSpriteSheet.minFilter = THREE.NearestFilter;

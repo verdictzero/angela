@@ -9,6 +9,7 @@
 
 import * as THREE from 'three';
 import { createUnlitMaterial } from './shaders.js';
+import { bustUrl } from './cacheBust.js';
 
 // Grid and culling
 const CELL_SIZE = 50;        // 50×50m world-space cells
@@ -102,7 +103,7 @@ export class FoliageManager {
         const loader = new THREE.TextureLoader();
         for (const tier of TIERS) {
             for (const file of tier.textures) {
-                const tex = loader.load(`assets/foliage/${file}`);
+                const tex = loader.load(bustUrl(`assets/foliage/${file}`));
                 tex.colorSpace = THREE.SRGBColorSpace;
                 tex.magFilter = THREE.NearestFilter;
                 tex.minFilter = THREE.NearestFilter;

@@ -12,6 +12,7 @@ import * as THREE from 'three';
 import { lerp } from './utils.js';
 import { createUnlitMaterial } from './shaders.js';
 import { getGearAndRPM } from './hud.js';
+import { bustUrl } from './cacheBust.js';
 
 // LHD driver offset — used by main.js for camera positioning
 const DRIVER_X = -0.35;
@@ -164,7 +165,7 @@ export class Cockpit {
                 loaded++;
                 if (loaded === BLOOD_IMAGES.length) this._bloodImagesReady = true;
             };
-            img.src = src;
+            img.src = bustUrl(src);
             this._bloodImages.push(img);
         }
     }
@@ -212,7 +213,7 @@ export class Cockpit {
     _loadImages() {
         const loader = new THREE.TextureLoader();
 
-        loader.load('assets/dashboard.png', (tex) => {
+        loader.load(bustUrl('assets/dashboard.png'), (tex) => {
             tex.colorSpace = THREE.SRGBColorSpace;
             tex.magFilter = THREE.NearestFilter;
             tex.minFilter = THREE.NearestFilter;
@@ -232,7 +233,7 @@ export class Cockpit {
             this._updateLayout();
         });
 
-        loader.load('assets/under_dash.png', (tex) => {
+        loader.load(bustUrl('assets/under_dash.png'), (tex) => {
             tex.colorSpace = THREE.SRGBColorSpace;
             tex.magFilter = THREE.NearestFilter;
             tex.minFilter = THREE.NearestFilter;
@@ -252,7 +253,7 @@ export class Cockpit {
             this._updateLayout();
         });
 
-        loader.load('assets/steering_wheel.png', (tex) => {
+        loader.load(bustUrl('assets/steering_wheel.png'), (tex) => {
             tex.colorSpace = THREE.SRGBColorSpace;
             tex.magFilter = THREE.NearestFilter;
             tex.minFilter = THREE.NearestFilter;

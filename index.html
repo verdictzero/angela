@@ -7,11 +7,23 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>ROADKILL</title>
-    <link rel="stylesheet" href="css/style.css">
     <script>
-    // Force-refresh when a new version is deployed.
+    // Force-refresh when a new version is deployed, and cache-bust all assets.
     // Bump the version in version.json to trigger a reload for all players.
     (function() {
+        function boot(v) {
+            window.__CACHE_BUST = v;
+            // Dynamically load CSS with cache-bust param
+            var link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = 'css/style.css?v=' + v;
+            document.head.appendChild(link);
+            // Dynamically load main module with cache-bust param
+            var script = document.createElement('script');
+            script.type = 'module';
+            script.src = 'js/main.js?v=' + v;
+            document.body.appendChild(script);
+        }
         fetch('version.json?_t=' + Date.now())
             .then(function(r) { return r.json(); })
             .then(function(data) {
@@ -27,9 +39,10 @@
                     window.location.reload();
                 } else {
                     localStorage.setItem('rk_version', data.version);
+                    boot(data.version);
                 }
             })
-            .catch(function() { /* version.json not available, skip */ });
+            .catch(function() { boot(Date.now()); });
     })();
     </script>
     <script type="importmap">
@@ -157,6 +170,5 @@
     <!-- Canvas container -->
     <div id="game-container"></div>
 
-    <script type="module" src="js/main.js"></script>
 </body>
 </html>

@@ -11,6 +11,7 @@
 
 import * as THREE from 'three';
 import { randomRange, clamp, createCanvasTexture } from './utils.js';
+import { bustUrl } from './cacheBust.js';
 
 // ── Road dimensions (2x wider) ─────────────────────────────────
 const ROAD_HALF_WIDTH = 8.75;      // 2 lanes, each 8.75m
@@ -151,7 +152,7 @@ export class RoadManager {
         }, 3, 3);
 
         // Concrete sidewalk — file-based texture
-        const sidewalkTex = new THREE.TextureLoader().load('assets/sidewalk.png');
+        const sidewalkTex = new THREE.TextureLoader().load(bustUrl('assets/sidewalk.png'));
         sidewalkTex.wrapS = THREE.RepeatWrapping;
         sidewalkTex.wrapT = THREE.RepeatWrapping;
         sidewalkTex.repeat.set(2, 2);
@@ -162,7 +163,7 @@ export class RoadManager {
         const sidewalk = sidewalkTex;
 
         // Grass ground — loaded from texture file
-        const grassTex = new THREE.TextureLoader().load('assets/terrain/terrain_new_meadow_grass_checkered_v2.png');
+        const grassTex = new THREE.TextureLoader().load(bustUrl('assets/terrain/terrain_new_meadow_grass_checkered_v2.png'));
         grassTex.wrapS = THREE.RepeatWrapping;
         grassTex.wrapT = THREE.RepeatWrapping;
         grassTex.repeat.set(480, 480);
