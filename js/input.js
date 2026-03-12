@@ -291,6 +291,31 @@ export class InputManager {
         return sign * Math.pow(remapped, exponent);
     }
 
+    /**
+     * Steering-specific sensitivity ramp for thumbstick input.
+     * Uses a two-stage curve: gentle near center for precision,
+     * then ramps up aggressively for fast turns at full deflection.
+     * @param {number} raw — input in range -1..1
+     * @param {number} deadZone — fraction treated as zero
+     * @returns {number} processed steering value
+     */
+    _applySteerRamp(raw, deadZone = 0.10) {
+        const sign = Math.sign(raw);
+        const abs = Math.abs(raw);
+        if (abs < deadZone) return 0;
+        const remapped = (abs - deadZone) / (1 - deadZone);
+        // Two-stage ramp: soft inner zone (0–0.5) with high exponent,
+        // aggressive outer zone (0.5–1.0) that accelerates to full lock
+        if (remapped <= 0.5) {
+            // Inner half: gentle (exponent 2.5 on 0–1 rescaled range)
+            const inner = remapped / 0.5;
+            return sign * 0.25 * Math.pow(inner, 2.5);
+        }
+        // Outer half: ramp from 0.25 to 1.0 with exponent 1.5
+        const outer = (remapped - 0.5) / 0.5;
+        return sign * (0.25 + 0.75 * Math.pow(outer, 1.5));
+    }
+
     _updateJoystick(touchX, touchY, base, thumb) {
         const maxDist = 140;          // px — max joystick displacement
         const deadZone = 0.12;        // 12% dead zone near center
@@ -298,7 +323,7 @@ export class InputManager {
         // --- X axis (steering) ---
         const dx = touchX - this._joystickCenter.x;
         const clampedX = clamp(dx, -maxDist, maxDist);
-        this._touchSteerTarget = this._applyAnalogCurve(clampedX / maxDist, deadZone, 1.6);
+        this._touchSteerTarget = this._applySteerRamp(clampedX / maxDist, deadZone);
 
         // --- Y axis (gas / brake) ---
         const dy = touchY - this._joystickCenter.y;
@@ -368,9 +393,9 @@ export class InputManager {
             const gamepads = navigator.getGamepads();
             const gp = gamepads[this._gamepadIndex];
             if (gp) {
-                // Left stick X — steering with deadzone + response curve
+                // Left stick X — steering with sensitivity ramp
                 const lx = gp.axes[0] || 0;
-                const steerVal = this._applyAnalogCurve(lx, 0.10, 1.6);
+                const steerVal = this._applySteerRamp(lx, 0.10);
                 if (steerVal !== 0) steer += steerVal;
 
                 // Right trigger — gas (analog)
