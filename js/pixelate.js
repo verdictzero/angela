@@ -31,8 +31,8 @@ const PixelateShader = {
         varying vec2 vUv;
 
         void main() {
-            // Half-res grid: snap pixel coordinates to 2×2 blocks
-            vec2 pixelSize = 2.0 / uResolution;
+            // 1/8 res grid: snap pixel coordinates to 8×8 blocks
+            vec2 pixelSize = 8.0 / uResolution;
             vec2 snapped = floor(vUv / pixelSize + 0.5) * pixelSize;
             gl_FragColor = texture2D(tDiffuse, snapped);
         }
