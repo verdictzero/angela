@@ -54,6 +54,14 @@ export class HUD {
         this._shiftArrowDown = document.getElementById('shift-arrow-down');
         this._lightsEl = document.getElementById('hud-lights');
 
+        // Bottom bar elements
+        this._odoEl = document.getElementById('hud-odo');
+        this._compassEl = document.getElementById('hud-compass');
+
+        // Odometer — cumulative distance in meters
+        this._odometerMeters = 0;
+        this._lastPos = null;
+
         this._fuel = 100; // percent
         this._refuelTimer = 0;
 
@@ -231,6 +239,34 @@ export class HUD {
                 this._lightsEl.textContent = 'LAMPS: ON';
                 this._lightsEl.style.color = '';
             }
+        }
+
+        // Odometer — accumulate distance from vehicle position
+        if (vehicle && vehicle.position) {
+            if (this._lastPos) {
+                const dx = vehicle.position.x - this._lastPos.x;
+                const dz = vehicle.position.z - this._lastPos.z;
+                const dist = Math.sqrt(dx * dx + dz * dz);
+                if (dist < 50) { // skip teleport-like jumps
+                    this._odometerMeters += dist;
+                }
+            }
+            this._lastPos = { x: vehicle.position.x, z: vehicle.position.z };
+        }
+        if (this._odoEl) {
+            const miles = this._odometerMeters * 0.000621371;
+            this._odoEl.textContent = `ODO: ${String(Math.floor(miles)).padStart(6, '0')} mi`;
+        }
+
+        // Compass — heading from vehicle angle
+        if (this._compassEl && vehicle) {
+            // vehicle.angle is CW from -Z (north), convert to degrees 0-360
+            let deg = ((vehicle.angle * 180 / Math.PI) % 360 + 360) % 360;
+            deg = Math.round(deg);
+            const cardinals = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+            const idx = Math.round(deg / 45) % 8;
+            const cardinal = cardinals[idx];
+            this._compassEl.textContent = `HDG: ${cardinal.padEnd(2)} ${String(deg).padStart(3, '0')}\u00B0`;
         }
 
         // Combo timer
