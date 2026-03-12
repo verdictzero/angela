@@ -8,6 +8,7 @@
 
 import * as THREE from 'three';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { bustUrl } from './cacheBust.js';
 
 const R_STEPS = 8;
 const G_STEPS = 8;
@@ -115,7 +116,7 @@ const UzeboxLUTShader = {
 };
 
 export async function createUzeboxLUTPass(hexPath) {
-    const resp = await fetch(hexPath);
+    const resp = await fetch(bustUrl(hexPath));
     const text = await resp.text();
     const entries = text.trim().split(/\s+/);
 

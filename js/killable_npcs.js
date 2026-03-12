@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import { createUnlitMaterial } from './shaders.js';
 import { randomRange, normalizeAngle } from './utils.js';
+import { bustUrl } from './cacheBust.js';
 
 const HIT_RADIUS = 2.5;             // hit detection radius
 const HIT_FORWARD = 4;              // how far in front of car to check
@@ -46,7 +47,7 @@ let staticNpcTexture = null;
 
 function getMopedBackTexture() {
     if (!mopedBackTexture) {
-        mopedBackTexture = new THREE.TextureLoader().load('assets/moped_guy.png');
+        mopedBackTexture = new THREE.TextureLoader().load(bustUrl('assets/moped_guy.png'));
         mopedBackTexture.colorSpace = THREE.SRGBColorSpace;
         mopedBackTexture.magFilter = THREE.NearestFilter;
         mopedBackTexture.minFilter = THREE.NearestFilter;
@@ -56,7 +57,7 @@ function getMopedBackTexture() {
 
 function getMopedFrontTexture() {
     if (!mopedFrontTexture) {
-        mopedFrontTexture = new THREE.TextureLoader().load('assets/moped_guy_front.png');
+        mopedFrontTexture = new THREE.TextureLoader().load(bustUrl('assets/moped_guy_front.png'));
         mopedFrontTexture.colorSpace = THREE.SRGBColorSpace;
         mopedFrontTexture.magFilter = THREE.NearestFilter;
         mopedFrontTexture.minFilter = THREE.NearestFilter;
@@ -66,7 +67,7 @@ function getMopedFrontTexture() {
 
 function getMopedSideTexture() {
     if (!mopedSideTexture) {
-        mopedSideTexture = new THREE.TextureLoader().load('assets/moped_guy_side.png');
+        mopedSideTexture = new THREE.TextureLoader().load(bustUrl('assets/moped_guy_side.png'));
         mopedSideTexture.colorSpace = THREE.SRGBColorSpace;
         mopedSideTexture.magFilter = THREE.NearestFilter;
         mopedSideTexture.minFilter = THREE.NearestFilter;
@@ -76,7 +77,7 @@ function getMopedSideTexture() {
 
 function getStaticNpcTexture() {
     if (!staticNpcTexture) {
-        staticNpcTexture = new THREE.TextureLoader().load('assets/static_npc_1.png');
+        staticNpcTexture = new THREE.TextureLoader().load(bustUrl('assets/static_npc_1.png'));
         staticNpcTexture.colorSpace = THREE.SRGBColorSpace;
         staticNpcTexture.magFilter = THREE.NearestFilter;
         staticNpcTexture.minFilter = THREE.NearestFilter;
