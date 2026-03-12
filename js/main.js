@@ -10,7 +10,6 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { createUzeboxLUTPass } from './uzeboxLUT.js';
-import { createPixelatePass } from './pixelate.js';
 import { InputManager } from './input.js';
 import { RoadManager } from './road.js';
 import { Vehicle } from './vehicle.js';
@@ -65,14 +64,8 @@ const bloomPass = new UnrealBloomPass(
 );
 composer.addPass(bloomPass);
 
-// Pixelation — half-res nearest-neighbor downscale before dithering
-const pixelatePass = createPixelatePass();
-composer.addPass(pixelatePass);
-
-// Uzebox palette LUT — async load, inserted after pixelation once ready
+// Uzebox palette LUT — async load
 createUzeboxLUTPass('assets/uzebox.hex').then(lutPass => {
-    // Mark pixelation as no longer the final pass
-    pixelatePass.renderToScreen = false;
     composer.addPass(lutPass);
 });
 
