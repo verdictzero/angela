@@ -147,11 +147,13 @@ export class HUD {
                 const showUp = rpm > 6200 && gear < 7;
                 const showDown = rpm < 2000 && gear > 1 && Math.abs(speedMs) > 2;
                 if (this._shiftArrowUp) {
-                    this._shiftArrowUp.textContent = showUp ? '\u25B2' : '\u25B2';
+                    const upSpan = this._shiftArrowUp.querySelector('span');
+                    if (upSpan) upSpan.textContent = '\u25B2';
                     this._shiftArrowUp.className = showUp ? 'shift-arrow shift-arrow-on' : 'shift-arrow shift-arrow-off';
                 }
                 if (this._shiftArrowDown) {
-                    this._shiftArrowDown.textContent = showDown ? '\u25BC' : '\u25BC';
+                    const downSpan = this._shiftArrowDown.querySelector('span');
+                    if (downSpan) downSpan.textContent = '\u25BC';
                     this._shiftArrowDown.className = showDown ? 'shift-arrow shift-arrow-on' : 'shift-arrow shift-arrow-off';
                 }
             } else {
