@@ -29,8 +29,8 @@ const BOOST_ENGINE_MULT = 1.5;      // stronger boost multiplier
 const MAX_SPEED = 62;               // m/s (~223 km/h) soft limit — upgraded top speed
 const BOOST_MAX_SPEED = 85;
 const REVERSE_FORCE_FRAC = 0.30;   // reverse is 30 % of forward power
-const AWD_FRONT_SPLIT = 0.40;      // 40% front / 60% rear torque split
-const AWD_REAR_SPLIT = 0.60;
+const AWD_FRONT_SPLIT = 0.30;      // 30% front / 70% rear torque split (moderate rear bias)
+const AWD_REAR_SPLIT = 0.70;
 
 // ── Braking ────────────────────────────────────────────────────
 const MAX_BRAKE_FORCE = 18000;      // N total
@@ -42,10 +42,10 @@ const DRAG_COEFF = 0.42;            // Cd·A·½ρ lumped
 const ROLLING_RESISTANCE = 90;      // N constant
 
 // ── Tire Model (Pacejka-lite) ──────────────────────────────────
-const CS_FRONT = 145000;            // N/rad cornering stiffness (ultra high-perf tires)
-const CS_REAR = 155000;
-const MU_FRONT = 2.60;              // peak grip coefficient (maximum traction)
-const MU_REAR = 2.55;
+const CS_FRONT = 165000;            // N/rad cornering stiffness (ultra high-perf tires)
+const CS_REAR = 175000;
+const MU_FRONT = 3.00;              // peak grip coefficient (maximum traction)
+const MU_REAR = 2.90;
 const PACEJKA_C = 1.45;             // shape factor (higher = sharper peak)
 const GRIP_MIN_FRAC = 0.25;         // minimum lateral grip even when spinning
 
