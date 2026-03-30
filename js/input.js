@@ -43,6 +43,7 @@ export class InputManager {
         this._mouseSteering = false;
         this._mouseSteerValue = 0;
         this._mouseMovementX = 0;
+        this._kbSteerValue = 0;
 
         // Touch state
         this._touchActive = false;
@@ -345,9 +346,14 @@ export class InputManager {
         let boost = false;
         let clutch = false;
 
-        // --- Keyboard ---
-        if (this._keys['ArrowLeft'] || this._keys['KeyA']) steer -= 1;
-        if (this._keys['ArrowRight'] || this._keys['KeyD']) steer += 1;
+        // --- Keyboard (analog ramp) ---
+        let kbTarget = 0;
+        if (this._keys['ArrowLeft'] || this._keys['KeyA']) kbTarget -= 1;
+        if (this._keys['ArrowRight'] || this._keys['KeyD']) kbTarget += 1;
+        const kbRate = (kbTarget !== 0 ? 3.0 : 5.0) * dt;
+        const kbDiff = kbTarget - this._kbSteerValue;
+        this._kbSteerValue += clamp(kbDiff, -kbRate, kbRate);
+        steer += this._kbSteerValue;
         if (this._keys['ArrowUp'] || this._keys['KeyW']) gas = 1;
         if (this._keys['ArrowDown'] || this._keys['KeyS']) brake = 1;
         if (this._keys['Space']) handbrake = true;
