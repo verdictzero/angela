@@ -12,6 +12,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { createUzeboxLUTPass } from './uzeboxLUT.js';
 import { InputManager } from './input.js';
 import { RoadManager } from './road.js';
+import { MazeRoadManager } from './mazeRoad.js';
 import { Vehicle } from './vehicle.js';
 import { Cockpit, DRIVER_OFFSET_X } from './cockpit.js';
 import { KillableNPCManager } from './killable_npcs.js';
@@ -84,7 +85,8 @@ scene.add(hemiLight);
 // ── Game Systems ──────────────────────────────────────────────
 
 const input = new InputManager();
-const road = new RoadManager(scene);
+const _mazeMode = new URLSearchParams(window.location.search).has('maze');
+const road = _mazeMode ? new MazeRoadManager(scene) : new RoadManager(scene);
 const vehicle = new Vehicle();
 const cockpit = new Cockpit(camera);
 const killableNPCs = new KillableNPCManager(scene);
@@ -424,6 +426,20 @@ function gameLoop() {
 
     // Update vehicle physics
     vehicle.update(dt, input, roadInfo);
+
+    // Maze wall collision
+    if (_mazeMode && road.getWallCollision) {
+        const push = road.getWallCollision(vehicle.position, 1.5);
+        if (push) {
+            vehicle.position.add(push);
+            // Kill speed on collision axis
+            const fwd = new THREE.Vector3(Math.sin(vehicle.angle), 0, -Math.cos(vehicle.angle));
+            const dot = fwd.x * push.x + fwd.z * push.z;
+            if (Math.abs(dot) > 0.3) {
+                vehicle.speed *= 0.3;
+            }
+        }
+    }
 
     // Redline health degradation
     {
