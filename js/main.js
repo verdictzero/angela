@@ -233,6 +233,25 @@ if (uiOpacitySlider) {
     });
 }
 
+// Steering sensitivity
+const uiSensSlider = document.getElementById('ui-sensitivity-slider');
+const uiSensValue  = document.getElementById('ui-sensitivity-value');
+
+const savedSens = parseFloat(localStorage.getItem('rk_touch_sensitivity')) || 1.0;
+input.setSensitivity(savedSens);
+
+if (uiSensSlider) {
+    uiSensSlider.value = Math.round(savedSens * 100);
+    if (uiSensValue) uiSensValue.textContent = Math.round(savedSens * 100) + '%';
+
+    uiSensSlider.addEventListener('input', () => {
+        const s = parseInt(uiSensSlider.value, 10) / 100;
+        input.setSensitivity(s);
+        if (uiSensValue) uiSensValue.textContent = uiSensSlider.value + '%';
+        localStorage.setItem('rk_touch_sensitivity', s);
+    });
+}
+
 // Toggle settings panel
 function toggleTouchSettings(e) {
     if (e) { e.preventDefault(); e.stopPropagation(); }

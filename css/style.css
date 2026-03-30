@@ -506,29 +506,42 @@ body {
 }
 
 #touch-steer {
-    width: calc(280px * var(--touch-scale));
-    height: calc(280px * var(--touch-scale));
+    width: calc(300px * var(--touch-scale));
+    height: calc(80px * var(--touch-scale));
 }
 
-#joystick-base {
-    width: calc(280px * var(--touch-scale));
-    height: calc(280px * var(--touch-scale));
-    border-radius: calc(140px * var(--touch-scale));
-    background: rgba(255, 255, 255, 0.1);
+#steering-track {
+    width: calc(300px * var(--touch-scale));
+    height: calc(70px * var(--touch-scale));
+    border-radius: calc(35px * var(--touch-scale));
+    background: rgba(255, 255, 255, 0.08);
     border: 2px solid rgba(255, 255, 255, 0.25);
     position: relative;
     display: flex;
-    justify-content: center;
     align-items: center;
 }
 
-#joystick-thumb {
-    width: calc(112px * var(--touch-scale));
-    height: calc(112px * var(--touch-scale));
-    border-radius: calc(56px * var(--touch-scale));
+#steering-center-mark {
+    position: absolute;
+    left: 50%;
+    top: 15%;
+    height: 70%;
+    width: 2px;
+    background: rgba(255, 255, 255, 0.15);
+    transform: translateX(-50%);
+    pointer-events: none;
+}
+
+#steering-thumb {
+    width: calc(70px * var(--touch-scale));
+    height: calc(58px * var(--touch-scale));
+    border-radius: calc(12px * var(--touch-scale));
     background: rgba(255, 255, 255, 0.35);
     border: 2px solid rgba(255, 255, 255, 0.5);
     position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
     transition: none;
 }
 
