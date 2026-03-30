@@ -122,14 +122,20 @@
             <input type="range" id="ui-opacity-slider" min="20" max="100" value="100" step="5">
             <span id="ui-opacity-value" class="touch-settings-value">100%</span>
         </div>
+        <div class="touch-settings-row">
+            <label for="ui-sensitivity-slider">SENS</label>
+            <input type="range" id="ui-sensitivity-slider" min="20" max="200" value="100" step="10">
+            <span id="ui-sensitivity-value" class="touch-settings-value">100%</span>
+        </div>
     </div>
 
     <!-- Touch Controls -->
     <div id="touch-controls" class="hidden">
         <div id="touch-left">
             <div id="touch-steer">
-                <div id="joystick-base">
-                    <div id="joystick-thumb"></div>
+                <div id="steering-track">
+                    <div id="steering-center-mark"></div>
+                    <div id="steering-thumb"></div>
                 </div>
             </div>
             <button id="btn-clutch" class="touch-btn touch-btn-blue">CLUTCH</button>
