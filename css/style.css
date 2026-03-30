@@ -525,11 +525,6 @@ body {
     gap: calc(8px * var(--touch-scale));
 }
 
-#touch-lights {
-    display: flex;
-    flex-direction: column;
-    gap: calc(8px * var(--touch-scale));
-}
 
 /* Shared touch button base */
 .touch-btn {
@@ -653,15 +648,16 @@ body {
     bottom: calc(220px * var(--touch-scale, 1) + 10px);
     right: 20px;
     z-index: 65;
-    width: 48px;
-    height: 48px;
+    width: calc(90px * var(--touch-scale, 1));
+    height: calc(56px * var(--touch-scale, 1));
     font-family: '7seg', 'Courier New', monospace;
-    font-size: 0.75rem;
+    font-size: calc(0.85rem * var(--touch-scale, 1));
+    font-weight: bold;
     letter-spacing: 0.08em;
     background: rgba(0, 30, 0, 0.75);
     color: #0f0;
     border: 1px solid #0f0;
-    border-radius: 4px;
+    border-radius: calc(10px * var(--touch-scale, 1));
     text-shadow: 0 0 6px rgba(0, 255, 0, 0.4);
     box-shadow: 0 0 8px rgba(0, 255, 0, 0.3);
     cursor: pointer;
@@ -675,7 +671,7 @@ body {
 
 #touch-settings-panel {
     position: fixed;
-    bottom: calc(220px * var(--touch-scale, 1) + 64px);
+    bottom: calc(220px * var(--touch-scale, 1) + 56px * var(--touch-scale, 1) + 16px);
     right: 20px;
     z-index: 66;
     width: 210px;
