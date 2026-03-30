@@ -148,7 +148,8 @@ body {
 }
 
 #start-screen h1 {
-    font-family: 'Arial Narrow', 'Liberation Sans Narrow', 'Nimbus Sans Narrow', sans-serif;
+    font-family: 'Barlow Condensed', 'Arial Narrow', 'Liberation Sans Narrow', 'Nimbus Sans Narrow', sans-serif;
+    font-weight: 700;
     font-style: italic;
     font-size: 5rem;
     color: #fff;
@@ -163,6 +164,13 @@ body {
     padding: 0 1rem;
 }
 
+#start-screen h1 .year-rainbow {
+    color: #000;
+    -webkit-text-stroke: 3px hsl(var(--rainbow-hue), 100%, 50%);
+    paint-order: stroke fill;
+    animation: rainbow-stroke 3s linear infinite;
+}
+
 #start-prompt {
     font-size: 1.2rem;
     color: #fff;
@@ -175,6 +183,17 @@ body {
     color: #555;
     text-align: center;
     line-height: 1.8;
+}
+
+@property --rainbow-hue {
+    syntax: '<number>';
+    inherits: false;
+    initial-value: 0;
+}
+
+@keyframes rainbow-stroke {
+    from { --rainbow-hue: 0; }
+    to   { --rainbow-hue: 360; }
 }
 
 @keyframes pulse {
