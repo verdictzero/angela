@@ -106,6 +106,22 @@
         </div>
     </div>
 
+    <!-- Touch Settings -->
+    <button id="touch-settings-btn" class="hidden">CFG</button>
+    <div id="touch-settings-panel" class="hidden">
+        <div class="touch-settings-title">TOUCH UI</div>
+        <div class="touch-settings-row">
+            <label for="ui-scale-slider">SCALE</label>
+            <input type="range" id="ui-scale-slider" min="50" max="150" value="100" step="5">
+            <span id="ui-scale-value" class="touch-settings-value">100%</span>
+        </div>
+        <div class="touch-settings-row">
+            <label for="ui-opacity-slider">ALPHA</label>
+            <input type="range" id="ui-opacity-slider" min="20" max="100" value="100" step="5">
+            <span id="ui-opacity-value" class="touch-settings-value">100%</span>
+        </div>
+    </div>
+
     <!-- Touch Controls -->
     <div id="touch-controls" class="hidden">
         <div id="touch-left">

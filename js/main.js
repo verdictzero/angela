@@ -181,6 +181,76 @@ window.addEventListener('keydown', (e) => {
     }
 });
 
+// ── Touch UI Settings ────────────────────────────────────────
+
+const touchControls    = document.getElementById('touch-controls');
+const touchSettingsBtn = document.getElementById('touch-settings-btn');
+const touchSettingsPanel = document.getElementById('touch-settings-panel');
+const uiScaleSlider    = document.getElementById('ui-scale-slider');
+const uiScaleValue     = document.getElementById('ui-scale-value');
+const uiOpacitySlider  = document.getElementById('ui-opacity-slider');
+const uiOpacityValue   = document.getElementById('ui-opacity-value');
+
+// Restore saved preferences
+const savedScale   = parseFloat(localStorage.getItem('rk_touch_scale'))   || 1;
+const savedOpacity = parseFloat(localStorage.getItem('rk_touch_opacity')) || 1;
+
+function applyTouchScale(s) {
+    if (touchControls) touchControls.style.setProperty('--touch-scale', s);
+    // Keep settings button positioned above the scaled touch-controls
+    if (touchSettingsBtn) touchSettingsBtn.style.bottom = (220 * s + 10) + 'px';
+    if (touchSettingsPanel) touchSettingsPanel.style.bottom = (220 * s + 56) + 'px';
+}
+
+function applyTouchOpacity(o) {
+    if (touchControls) touchControls.style.setProperty('--touch-opacity', o);
+}
+
+applyTouchScale(savedScale);
+applyTouchOpacity(savedOpacity);
+
+if (uiScaleSlider) {
+    uiScaleSlider.value = Math.round(savedScale * 100);
+    if (uiScaleValue) uiScaleValue.textContent = Math.round(savedScale * 100) + '%';
+
+    uiScaleSlider.addEventListener('input', () => {
+        const s = parseInt(uiScaleSlider.value, 10) / 100;
+        applyTouchScale(s);
+        if (uiScaleValue) uiScaleValue.textContent = uiScaleSlider.value + '%';
+        localStorage.setItem('rk_touch_scale', s);
+    });
+}
+
+if (uiOpacitySlider) {
+    uiOpacitySlider.value = Math.round(savedOpacity * 100);
+    if (uiOpacityValue) uiOpacityValue.textContent = Math.round(savedOpacity * 100) + '%';
+
+    uiOpacitySlider.addEventListener('input', () => {
+        const o = parseInt(uiOpacitySlider.value, 10) / 100;
+        applyTouchOpacity(o);
+        if (uiOpacityValue) uiOpacityValue.textContent = uiOpacitySlider.value + '%';
+        localStorage.setItem('rk_touch_opacity', o);
+    });
+}
+
+// Toggle settings panel
+function toggleTouchSettings(e) {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    if (touchSettingsPanel) touchSettingsPanel.classList.toggle('hidden');
+}
+
+if (touchSettingsBtn) {
+    touchSettingsBtn.addEventListener('click', toggleTouchSettings);
+    touchSettingsBtn.addEventListener('touchstart', toggleTouchSettings);
+}
+
+// Close settings panel on outside tap
+window.addEventListener('pointerdown', (e) => {
+    if (!touchSettingsPanel || touchSettingsPanel.classList.contains('hidden')) return;
+    if (touchSettingsPanel.contains(e.target) || touchSettingsBtn.contains(e.target)) return;
+    touchSettingsPanel.classList.add('hidden');
+});
+
 // ── Start Screen ──────────────────────────────────────────────
 
 let gameStarted = false;
