@@ -54,8 +54,8 @@ const HANDBRAKE_REAR_MU = 0.18;
 
 // ── Steering ───────────────────────────────────────────────────
 const MAX_STEER_ANGLE = 0.40;       // rad (~23 °) — tighter max angle
-const STEER_SPEED_LOW = 2.0;        // rad/s input rate at low speed
-const STEER_SPEED_HIGH = 0.4;       // rad/s at high speed — reduced for stability
+const STEER_SPEED_LOW = 4.0;        // rad/s tracking rate at low speed
+const STEER_SPEED_HIGH = 2.0;       // rad/s at high speed — reduced for stability
 const STEER_RETURN = 5.0;           // self-centering rate
 const MIN_STEER_SPEED = 1.0;        // m/s minimum to steer
 const DRIFT_STEER_BOOST = 1.3;      // counter-steer responsiveness multiplier
@@ -411,16 +411,16 @@ export class Vehicle {
         if (roadInfo && roadInfo.onSidewalk) targetY = 0.75;
         this.position.y = lerp(this.position.y, targetY, 10 * dt);
 
-        // ── Steering input ──────────────────────────────────────
+        // ── Steering input (position-based) ────────────────────
         if (absVf > MIN_STEER_SPEED) {
+            const targetAngle = input.steer * MAX_STEER_ANGLE;
             const speedFrac = clamp(1 - absVf / MAX_SPEED, 0, 1);
             let steerRate = lerp(STEER_SPEED_HIGH, STEER_SPEED_LOW, speedFrac);
             if (this.drifting) steerRate *= DRIFT_STEER_BOOST;
-            this.steerAngle += input.steer * steerRate * dt;
-        }
-
-        // Self-centering
-        if (Math.abs(input.steer) < 0.1) {
+            const maxDelta = steerRate * dt;
+            const diff = targetAngle - this.steerAngle;
+            this.steerAngle += clamp(diff, -maxDelta, maxDelta);
+        } else {
             this.steerAngle -= this.steerAngle * STEER_RETURN * dt;
             if (Math.abs(this.steerAngle) < 0.01) this.steerAngle = 0;
         }
