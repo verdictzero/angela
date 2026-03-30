@@ -199,7 +199,7 @@ function applyTouchScale(s) {
     if (touchControls) touchControls.style.setProperty('--touch-scale', s);
     // Keep settings button positioned above the scaled touch-controls
     if (touchSettingsBtn) touchSettingsBtn.style.bottom = (220 * s + 10) + 'px';
-    if (touchSettingsPanel) touchSettingsPanel.style.bottom = (220 * s + 56) + 'px';
+    if (touchSettingsPanel) touchSettingsPanel.style.bottom = (220 * s + 64) + 'px';
 }
 
 function applyTouchOpacity(o) {
