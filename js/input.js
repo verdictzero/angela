@@ -161,6 +161,9 @@ export class InputManager {
         const touchControls = document.getElementById('touch-controls');
         if (touchControls) touchControls.classList.remove('hidden');
 
+        const settingsBtn = document.getElementById('touch-settings-btn');
+        if (settingsBtn) settingsBtn.classList.remove('hidden');
+
         const joystickBase = document.getElementById('joystick-base');
         const joystickThumb = document.getElementById('joystick-thumb');
         const btnGas = document.getElementById('btn-gas');
@@ -183,6 +186,7 @@ export class InputManager {
                     x: rect.left + rect.width / 2,
                     y: rect.top + rect.height / 2
                 };
+                this._joystickMaxDist = rect.width / 2;
                 this._updateJoystick(touch.clientX, touch.clientY, joystickBase, joystickThumb);
             });
 
@@ -317,7 +321,7 @@ export class InputManager {
     }
 
     _updateJoystick(touchX, touchY, base, thumb) {
-        const maxDist = 140;          // px — max joystick displacement
+        const maxDist = this._joystickMaxDist || 140; // px — adapts to UI scale
         const deadZone = 0.12;        // 12% dead zone near center
 
         // --- X axis (steering) ---
